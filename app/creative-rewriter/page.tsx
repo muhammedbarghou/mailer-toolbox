@@ -43,18 +43,18 @@ export default function page() {
   }
 
   return (
-    <main className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 p-4 md:p-8">
+    <main className="min-h-screen p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">Email HTML Rewriter</h1>
+          <h1 className="text-4xl font-bold mb-2">Email HTML Rewriter</h1>
           <p className="text-slate-600">Rewrite your email HTML while maintaining structure and deliverability</p>
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">
           {/* Input Section */}
           <Card className="p-6 flex flex-col">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">Original Email HTML</h2>
+            <h2 className="text-lg font-semibold mb-4">Original Email HTML</h2>
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -78,13 +78,13 @@ export default function page() {
             {input.trim() && (
               <Card className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-slate-900">HTML REVIEW</h3>
+                  <h3 className="text-lg font-semibold ">HTML REVIEW</h3>
                   <Button variant="outline" size="sm" onClick={() => copyToClipboard(input, "htmlReview")}>
                     {copied === "htmlReview" ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                   </Button>
                 </div>
-                <div className="bg-slate-50 rounded p-4 max-h-64 overflow-y-auto">
-                  <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap wrap-break-word">{input}</pre>
+                <div className="rounded p-4 max-h-64 overflow-y-auto">
+                  <pre className="text-xs font-mono  whitespace-pre-wrap wrap-break-word">{input}</pre>
                 </div>
               </Card>
             )}
@@ -94,13 +94,13 @@ export default function page() {
                 {/* 7-bit Version */}
                 <Card className="p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-slate-900">7-BIT VERSION</h3>
+                    <h3 className="text-lg font-semibold ">7-BIT VERSION</h3>
                     <Button variant="outline" size="sm" onClick={() => copyToClipboard(result.sevenBit, "sevenBit")}>
                       {copied === "sevenBit" ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     </Button>
                   </div>
-                  <div className="bg-slate-50 rounded p-4 max-h-64 overflow-y-auto">
-                    <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap wrap-break-word">
+                  <div className=" rounded p-4 max-h-64 overflow-y-auto">
+                    <pre className="text-xs font-mono  whitespace-pre-wrap wrap-break-word">
                       {result.sevenBit}
                     </pre>
                   </div>
@@ -109,7 +109,7 @@ export default function page() {
                 {/* Quoted-Printable Version */}
                 <Card className="p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-slate-900">QUOTED-PRINTABLE VERSION</h3>
+                    <h3 className="text-lg font-semibold ">QUOTED-PRINTABLE VERSION</h3>
                     <Button
                       variant="outline"
                       size="sm"
@@ -118,8 +118,8 @@ export default function page() {
                       {copied === "quotedPrintable" ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     </Button>
                   </div>
-                  <div className="bg-slate-50 rounded p-4 max-h-64 overflow-y-auto">
-                    <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap wrap-break-word">
+                  <div className=" rounded p-4 max-h-64 overflow-y-auto">
+                    <pre className="text-xs font-mono  whitespace-pre-wrap wrap-break-word">
                       {result.quotedPrintable}
                     </pre>
                   </div>
@@ -128,7 +128,7 @@ export default function page() {
             )}
 
             {!result && !loading && !input.trim() && (
-              <Card className="p-6 text-center text-slate-500">
+              <Card className="p-6 text-center ">
                 <p>Paste your email HTML and click "Rewrite Email" to get started</p>
               </Card>
             )}
