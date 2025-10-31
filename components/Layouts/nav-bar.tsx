@@ -1,4 +1,4 @@
-import { InboxIcon, ZapIcon } from "lucide-react"
+import { InboxIcon, ZapIcon, PanelsRightBottom } from "lucide-react"
 import Logo from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,6 +19,7 @@ const navigationLinks = [
   { href: "/eml-to-txt-converter", label: "EML to TXT Converter", icon: ZapIcon },
   { href: "/ip-comparator", label: "IP Comparator", icon: ZapIcon },
   { href: "/creative-rewriter", label: "Creative Rewriter", icon: ZapIcon },
+  { href: "/photo-editor", label: "Photo Editor", icon: PanelsRightBottom },
 ]
 
 export default function Navbar() {
