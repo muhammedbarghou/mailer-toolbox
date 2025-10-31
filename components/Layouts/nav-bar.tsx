@@ -18,7 +18,7 @@ const navigationLinks = [
   { href: "/header-processor", label: "Header Processor", icon: InboxIcon },
   { href: "/eml-to-txt-converter", label: "EML to TXT Converter", icon: ZapIcon },
   { href: "/ip-comparator", label: "IP Comparator", icon: ZapIcon },
-  { href: "/photo-editor", label: "Photo Editor", icon: PanelsRightBottom },
+  { href: "/photo-editor", label: "Images Toolkit", icon: PanelsRightBottom },
 ]
 
 export default function Navbar() {
