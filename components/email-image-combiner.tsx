@@ -181,8 +181,8 @@ export default function EmailImageCombiner() {
       />
       {!image ? (
         <label htmlFor={`upload-${type}`} className="cursor-pointer block">
-          <Upload className="mx-auto mb-2 text-gray-400" size={32} />
-          <p className="text-sm font-semibold text-gray-700">{label}</p>
+          <Upload className="mx-auto mb-2 " size={32} />
+          <p className="text-sm font-semibold text-gray-400">{label}</p>
           <p className="text-xs text-gray-500 mt-1">{description}</p>
         </label>
       ) : (
@@ -196,7 +196,7 @@ export default function EmailImageCombiner() {
           />
           <button
             onClick={() => removeImage(type)}
-            className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+            className="absolute top-1 right-1 bg-red-500  rounded-full p-1 hover:bg-red-600 transition-colors"
             aria-label={`Remove ${label}`}
           >
             <X size={16} />
@@ -215,16 +215,16 @@ export default function EmailImageCombiner() {
   const allImagesUploaded = images.offer && images.footer1 && images.footer2
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6 md:p-12">
+    <div className="min-h-screen  p-6 md:p-12">
       <div className="max-w-5xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-lg p-8 md:p-12">
+        <div className="rounded-2xl shadow-lg p-8 md:p-12">
           {/* Header */}
           <div className="text-center mb-12">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-lg mb-4">
               <ImageIcon className="text-blue-600" size={32} />
             </div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Email Image Combiner</h1>
-            <p className="text-gray-600 text-lg">Combine your offer with legal footers into a single email image</p>
+            <h1 className="text-4xl font-bold mb-2">Email Image Combiner</h1>
+            <p className=" text-lg">Combine your offer with legal footers into a single email image</p>
           </div>
 
           {/* Upload Grid */}
