@@ -1,25 +1,32 @@
-import React from 'react'
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
+import Image from "next/image"
+import Link from "next/link"
 
 const page = () => {
   return (
     <section className="min-h-screen  p-4 md:p-8">
     <div className="absolute inset-x-0 top-0 flex h-full w-full items-center justify-center opacity-100">
-      <img
+      <Image
         alt="background"
         src="https://deifkwefumgah.cloudfront.net/shadcnblocks/block/patterns/square-alt-grid.svg"
         className="opacity-90 mask-[radial-gradient(75%_75%_at_center,white,transparent)]"
+        fill
+        priority
+        height={0}
+        width={0}
       />
     </div>
     <div className="relative">
       <div className="mx-auto flex max-w-5xl flex-col items-center">
         <div className="flex flex-col items-center gap-6 text-center">
           <div className="bg-background/30 rounded-xl p-4 shadow-sm backdrop-blur-sm">
-            <img
+            <Image
               src="/Logo.svg"
               alt="logo"
               className="h-16"
+              width={64}
+              height={64}
             />
           </div>
           <div>
@@ -36,59 +43,67 @@ const page = () => {
               Built with open-source technologies
             </p>
             <div className="flex flex-wrap items-center justify-center gap-4">
-              <a
-                href="#"
+              <Link
+                href="https://ui.shadcn.com/"
                 className={cn(
                   buttonVariants({ variant: "outline" }),
                   "group flex aspect-square h-12 items-center justify-center p-0",
                 )}
               >
-                <img
+                <Image
                   src="https://deifkwefumgah.cloudfront.net/shadcnblocks/block/logos/shadcn-ui-icon.svg"
                   alt="shadcn/ui logo"
                   className="h-6 saturate-0 transition-all group-hover:saturate-100"
+                  width={24}
+                  height={24}
                 />
-              </a>
-              <a
-                href="#"
+              </Link>
+              <Link
+                href="https://www.typescriptlang.org/"
                 className={cn(
                   buttonVariants({ variant: "outline" }),
                   "group flex aspect-square h-12 items-center justify-center p-0",
                 )}
               >
-                <img
+                <Image
                   src="https://deifkwefumgah.cloudfront.net/shadcnblocks/block/logos/typescript-icon.svg"
                   alt="TypeScript logo"
                   className="h-6 saturate-0 transition-all group-hover:saturate-100"
+                  width={24}
+                  height={24}
                 />
-              </a>
+              </Link>
 
               <a
-                href="#"
+                href="https://nextjs.org/"
                 className={cn(
                   buttonVariants({ variant: "outline" }),
                   "group flex aspect-square h-12 items-center justify-center p-0",
                 )}
               >
-                <img
-                  src="https://deifkwefumgah.cloudfront.net/shadcnblocks/block/logos/react-icon.svg"
+                <Image
+                  src="https://deifkwefumgah.cloudfront.net/shadcnblocks/block/logos/nextjs-icon.svg"
                   alt="React logo"
                   className="h-6 saturate-0 transition-all group-hover:saturate-100"
+                  width={24}
+                  height={24}
                 />
               </a>
-              <a
-                href="#"
+              <Link
+                href="https://tailwindcss.com/"
                 className={cn(
                   buttonVariants({ variant: "outline" }),
                   "group flex aspect-square h-12 items-center justify-center p-0",
                 )}
               >
-                <img
+                <Image
                   src="https://deifkwefumgah.cloudfront.net/shadcnblocks/block/logos/tailwind-icon.svg"
                   alt="Tailwind CSS logo"
                   className="h-6 saturate-0 transition-all group-hover:saturate-100"
+                  width={24}
+                  height={24}
                 />
-              </a>
+              </Link>
             </div>
           </div>
         </div>

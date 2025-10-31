@@ -1,9 +1,7 @@
-import React from 'react'
+'use client'
 
-const loading = () => {
-  return (
-    <div>loading</div>
-  )
-}
+import { Spinner } from '@/components/ui/shadcn-io/spinner';
 
-export default loading
+const loading = () => <Spinner className="text-slate-500" size={256} />;
+
+export default loading;
