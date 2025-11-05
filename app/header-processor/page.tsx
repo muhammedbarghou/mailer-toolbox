@@ -393,7 +393,7 @@ export default function EmailHeaderProcessor() {
     setProcessing(false)
   }, [files, config])
 
-  const handleDownloadAll = useCallback(() => {
+  const handleDownloadAll = useCallback(async () => {
     const completedFiles = files.filter((f) => f.status === "completed")
 
     if (completedFiles.length === 0) {
@@ -401,17 +401,23 @@ export default function EmailHeaderProcessor() {
       return
     }
 
-    completedFiles.forEach((file) => {
+    for (let i = 0; i < completedFiles.length; i++) {
+      const file = completedFiles[i]
       const blob = new Blob([file.processedContent], { type: "text/plain" })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `processed-${file.name.replace(".eml", ".txt")}` // Changed here
+      a.download = `processed-${file.name.replace(".eml", ".txt")}`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-    })
+      
+      // Add 500ms delay between downloads (except for the last one)
+      if (i < completedFiles.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+    }
   }, [files])
 
   const handleDownloadSingle = useCallback(

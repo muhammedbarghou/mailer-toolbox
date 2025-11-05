@@ -40,7 +40,7 @@ export default function ImageToBase64() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center gap-4 p-6 border rounded-2xl shadow-sm max-w-lg mx-auto bg-white">
+    <div className="flex flex-col items-center justify-center gap-4 p-6 border rounded-2xl shadow-sm max-w-lg mx-auto">
       <h2 className="text-xl font-semibold">Image to Base64 Converter</h2>
 
       <input
