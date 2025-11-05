@@ -18,6 +18,9 @@ const geistSans = Geist({
 export const metadata: Metadata = {
   title: "Mailer toolbox",
   description: "Your all-in-one suite of essential email and IP tools, designed to simplify your workflow and enhance productivity.",
+  icons: {
+    icon: "/Logo.svg",
+  },
 };
 
 export default function RootLayout({
@@ -27,11 +30,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="light" style={{colorScheme:"light"}}>
-      <body
-        className={`${geistSans.variable} antialiased min-h-screen flex flex-col light`
-        
-        }
-      >
+      <body>
         <ThemeProvider
             attribute="class"
             defaultTheme="system"

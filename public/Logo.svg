@@ -1,7 +1,61 @@
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<!-- Uploaded to: SVG Repo, www.svgrepo.com, Transformed by: SVG Repo Mixer Tools -->
-<svg width="800px" height="800px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g id="SVGRepo_bgCarrier" stroke-width="0"/>
-<g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"/>
-<g id="SVGRepo_iconCarrier"> <path fill-rule="evenodd" clip-rule="evenodd" d="M3.75 5.25L3 6V18L3.75 18.75H20.25L21 18V6L20.25 5.25H3.75ZM4.5 7.6955V17.25H19.5V7.69525L11.9999 14.5136L4.5 7.6955ZM18.3099 6.75H5.68986L11.9999 12.4864L18.3099 6.75Z" fill="#080341"/> </g>
-</svg>
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Gradient for the main airplane/envelope -->
+    <linearGradient id="primaryGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#06B6D4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#14B8A6;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Gradient for accent/spark -->
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FB923C;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#F97316;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Spark effect -->
+    <radialGradient id="sparkGradient" cx="50%" cy="50%">
+      <stop offset="0%" style="stop-color:#FBBF24;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FB923C;stop-opacity:0.3" />
+    </radialGradient>
+  </defs>
+  
+  <!-- Trajectory path dots (AI/automation element) -->
+  <g opacity="0.4">
+    <circle cx="25" cy="45" r="2" fill="url(#accentGradient)"/>
+    <circle cx="35" cy="50" r="2" fill="url(#accentGradient)"/>
+    <circle cx="45" cy="55" r="2" fill="url(#accentGradient)"/>
+    <circle cx="55" cy="58" r="2" fill="url(#accentGradient)"/>
+  </g>
+  
+  <!-- Circuit-like lines (AI element) -->
+  <g stroke="url(#accentGradient)" stroke-width="1.5" stroke-linecap="round" opacity="0.3">
+    <path d="M 30 42 L 35 47 M 40 48 L 45 53 M 50 54 L 55 57"/>
+  </g>
+  
+  <!-- Main envelope body (base) -->
+  <path d="M 20 60 L 20 85 L 70 85 L 70 60 L 45 75 Z" fill="url(#primaryGradient)" fill-opacity="0.9"/>
+  
+  <!-- Envelope flap (becomes airplane wing) -->
+  <path d="M 20 60 L 45 45 L 70 60" fill="url(#primaryGradient)" stroke="url(#primaryGradient)" stroke-width="1"/>
+  
+  <!-- Paper airplane nose (forward movement) -->
+  <path d="M 70 60 L 85 50 L 70 65 Z" fill="url(#primaryGradient)"/>
+  
+  <!-- Airplane wing (right side) -->
+  <path d="M 85 50 L 95 45 L 90 55 L 85 55 Z" fill="url(#primaryGradient)" fill-opacity="0.8"/>
+  
+  <!-- Airplane wing (left side, smaller) -->
+  <path d="M 70 65 L 78 70 L 70 75 Z" fill="url(#primaryGradient)" fill-opacity="0.7"/>
+  
+  <!-- Spark/star at tip (intelligence/automation indicator) -->
+  <g transform="translate(95, 45)">
+    <circle r="4" fill="url(#sparkGradient)"/>
+    <path d="M 0 -6 L 2 -2 L 6 -2 L 2 0 L 4 4 L 0 2 L -4 4 L -2 0 L -6 -2 L -2 -2 Z" 
+          fill="url(#accentGradient)" opacity="0.8"/>
+  </g>
+  
+  <!-- Small nodes along the path (AI/automation) -->
+  <circle cx="78" cy="52" r="2.5" fill="url(#accentGradient)" opacity="0.6"/>
+  <circle cx="65" cy="62" r="2" fill="url(#accentGradient)" opacity="0.5"/>
+</svg>
