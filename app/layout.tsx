@@ -6,6 +6,7 @@ import Footer from "@/components/footer";
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from 'sonner'
 import CookieConsentBanner from "@/components/cookie-consent-banner"
+import { Analytics } from "@vercel/analytics/next"
 
 
 const geistSans = Geist({
@@ -44,6 +45,7 @@ export default function RootLayout({
           <Footer />
           <Toaster position="bottom-right" />
           <CookieConsentBanner />
+          <Analytics />
         </ThemeProvider>
       </body>
     </html>
