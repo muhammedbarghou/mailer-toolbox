@@ -22,7 +22,7 @@ const extractPlainText = (emailContent: string): string => {
   let inHeader = true
   let boundary = ""
   let foundPlainText = false
-  let plainTextContent: string[] = []
+  const plainTextContent: string[] = []
   let currentPart: string[] = []
   let inPart = false
   let partContentType = ""
@@ -135,9 +135,8 @@ const cleanText = (text: string): string => {
   // Remove HTML tags
   let cleaned = text.replace(/<[^>]*>/g, "")
 
-  // Remove boundary markers (e.g., --3bac1b8c876824340cf4b5ac6e89f79f2861e223871d54a838f3008252d5)
-  // Matches lines starting with -- followed by alphanumeric characters
-  cleaned = cleaned.replace(/^--[a-f0-9]+$/gim, "")
+  // Matches lines starting with -- followed by any alphanumeric characters, hyphens, or underscores
+  cleaned = cleaned.replace(/^--[a-zA-Z0-9\-_=]+$/gm, "")
 
   // Remove Content-Transfer-Encoding headers (with or without surrounding text)
   cleaned = cleaned.replace(/Content-Transfer-Encoding:\s*quoted-printable/gi, "")
@@ -211,82 +210,77 @@ export default function EmlTextExtractor() {
     },
   })
 
-  const processFiles = useCallback(
-    async (filesToProcess: typeof files) => {
-      if (filesToProcess.length === 0) return
+  const processFiles = useCallback(async (filesToProcess: typeof files) => {
+    if (filesToProcess.length === 0) return
 
-      setIsProcessing(true)
-      const newProcessedFiles: ProcessedFile[] = []
+    setIsProcessing(true)
+    const newProcessedFiles: ProcessedFile[] = []
 
-      // Initialize files
-      for (const fileWrapper of filesToProcess) {
-        const file = fileWrapper.file instanceof File ? fileWrapper.file : null
-        if (!file) continue
+    // Initialize files
+    for (const fileWrapper of filesToProcess) {
+      const file = fileWrapper.file instanceof File ? fileWrapper.file : null
+      if (!file) continue
 
-        const processedFile: ProcessedFile = {
-          id: fileWrapper.id,
-          name: file.name.replace(/\.eml$/i, ""),
-          plainText: "",
-          size: file.size,
-          status: "processing",
-        }
-
-        newProcessedFiles.push(processedFile)
+      const processedFile: ProcessedFile = {
+        id: fileWrapper.id,
+        name: file.name.replace(/\.eml$/i, ""),
+        plainText: "",
+        size: file.size,
+        status: "processing",
       }
 
-      setProcessedFiles(newProcessedFiles)
+      newProcessedFiles.push(processedFile)
+    }
 
-      // Process each file
-      for (let i = 0; i < filesToProcess.length; i++) {
-        const fileWrapper = filesToProcess[i]
-        const file = fileWrapper.file instanceof File ? fileWrapper.file : null
-        if (!file) continue
+    setProcessedFiles(newProcessedFiles)
 
-        try {
-          const emailContent = await file.text()
-          const plainText = extractPlainText(emailContent)
+    // Process each file
+    for (let i = 0; i < filesToProcess.length; i++) {
+      const fileWrapper = filesToProcess[i]
+      const file = fileWrapper.file instanceof File ? fileWrapper.file : null
+      if (!file) continue
 
-          setProcessedFiles((prev) =>
-            prev.map((pf) =>
-              pf.id === fileWrapper.id
-                ? {
-                    ...pf,
-                    plainText,
-                    status: plainText.trim() ? "completed" : "error",
-                    error: plainText.trim() ? undefined : "No plain text content found",
-                  }
-                : pf,
-            ),
-          )
-        } catch (error) {
-          setProcessedFiles((prev) =>
-            prev.map((pf) =>
-              pf.id === fileWrapper.id
-                ? {
-                    ...pf,
-                    status: "error",
-                    error: "Failed to process file",
-                  }
-                : pf,
-            ),
-          )
-        }
+      try {
+        const emailContent = await file.text()
+        const plainText = extractPlainText(emailContent)
+
+        setProcessedFiles((prev) =>
+          prev.map((pf) =>
+            pf.id === fileWrapper.id
+              ? {
+                  ...pf,
+                  plainText,
+                  status: plainText.trim() ? "completed" : "error",
+                  error: plainText.trim() ? undefined : "No plain text content found",
+                }
+              : pf,
+          ),
+        )
+      } catch (error) {
+        setProcessedFiles((prev) =>
+          prev.map((pf) =>
+            pf.id === fileWrapper.id
+              ? {
+                  ...pf,
+                  status: "error",
+                  error: "Failed to process file",
+                }
+              : pf,
+          ),
+        )
       }
+    }
 
-      setIsProcessing(false)
+    setIsProcessing(false)
 
-      const completedCount = newProcessedFiles.length
-      if (completedCount > 0) {
-        toast.success(`${completedCount} file(s) processed successfully`)
-      }
-    },
-    [],
-  )
+    const completedCount = newProcessedFiles.length
+    if (completedCount > 0) {
+      toast.success(`${completedCount} file(s) processed successfully`)
+    }
+  }, [])
 
   const handleDownloadCombined = () => {
-    const completedFiles = processedFiles.filter(
-      (f) => f.status === "completed" && f.plainText.trim(),
-    )
+    const completedFiles = processedFiles.filter((f) => f.status === "completed" && f.plainText.trim())
 
     if (completedFiles.length === 0) {
       toast.error("No processed files to download")
@@ -294,7 +288,7 @@ export default function EmlTextExtractor() {
     }
 
     // Combine all plain texts with _SPT_ separator
-    const combinedText = completedFiles.map((file) => file.plainText.trim()).join("\n_SPT_\n")
+    const combinedText = completedFiles.map((file) => file.plainText.trim()).join("\n__SPT__\n")
 
     const timestamp = new Date().toISOString().split("T")[0]
     const blob = new Blob([combinedText], {
@@ -429,12 +423,7 @@ export default function EmlTextExtractor() {
                             <span>∙</span>
                             <span>{file.plainText.length.toLocaleString()} chars</span>
                             <span>∙</span>
-                            <span>
-                              {file.plainText.trim()
-                                ? file.plainText.trim().split(/\s+/).length
-                                : 0}{" "}
-                              words
-                            </span>
+                            <span>{file.plainText.trim() ? file.plainText.trim().split(/\s+/).length : 0} words</span>
                           </>
                         )}
                         {file.error && (
@@ -509,4 +498,3 @@ export default function EmlTextExtractor() {
     </div>
   )
 }
-
