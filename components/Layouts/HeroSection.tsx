@@ -11,6 +11,7 @@ import {
   Sparkles,
   PanelsRightBottom,
   ArrowRight,
+  Scissors,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -41,6 +42,15 @@ const tools = [
     color: "from-green-500/10 to-emerald-500/10",
     iconColor: "text-green-500",
     borderColor: "border-green-500/20",
+  },
+  {
+    href: "/eml-text-extractor",
+    title: "EML Text Extractor",
+    description: "Extract plain text from multiple .eml files, remove headers and HTML, then combine all texts into a single file separated by _SPT8 tag.",
+    icon: Scissors,
+    color: "from-yellow-500/10 to-amber-500/10",
+    iconColor: "text-yellow-500",
+    borderColor: "border-yellow-500/20",
   },
   {
     href: "/html-to-img",

@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { InboxIcon, ZapIcon, PanelsRightBottom, ImageIcon, Menu, RewindIcon } from "lucide-react"
+import { InboxIcon, ZapIcon, PanelsRightBottom, ImageIcon, Menu, RewindIcon, FileText } from "lucide-react"
 import Logo from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import {
@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils"
 const navigationLinks = [
   { href: "/header-processor", label: "Header Processor", icon: InboxIcon },
   { href: "/eml-to-txt-converter", label: "EML to TXT", icon: ZapIcon },
+  { href: "/eml-text-extractor", label: "EML Text Extractor", icon: FileText },
   { href: "/ip-comparator", label: "IP Comparator", icon: ZapIcon },
   { href: "/photo-editor", label: "Images Toolkit", icon: PanelsRightBottom },
   { href: "/html-to-img", label: "HTML to Image", icon: ImageIcon },
