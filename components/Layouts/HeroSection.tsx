@@ -46,7 +46,7 @@ const tools = [
   {
     href: "/eml-text-extractor",
     title: "EML Text Extractor",
-    description: "Extract plain text from multiple .eml files, remove headers and HTML, then combine all texts into a single file separated by _SPT8 tag.",
+    description: "Extract plain text from multiple .eml files, remove headers and HTML, then combine all texts into a single file separated by _SPT_ tag.",
     icon: Scissors,
     color: "from-yellow-500/10 to-amber-500/10",
     iconColor: "text-yellow-500",

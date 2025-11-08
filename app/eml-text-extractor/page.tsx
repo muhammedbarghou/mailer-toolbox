@@ -135,6 +135,18 @@ const cleanText = (text: string): string => {
   // Remove HTML tags
   let cleaned = text.replace(/<[^>]*>/g, "")
 
+  // Remove boundary markers (e.g., --3bac1b8c876824340cf4b5ac6e89f79f2861e223871d54a838f3008252d5)
+  // Matches lines starting with -- followed by alphanumeric characters
+  cleaned = cleaned.replace(/^--[a-f0-9]+$/gim, "")
+
+  // Remove Content-Transfer-Encoding headers (with or without surrounding text)
+  cleaned = cleaned.replace(/Content-Transfer-Encoding:\s*quoted-printable/gi, "")
+  cleaned = cleaned.replace(/Content-Transfer-Encoding:\s*quoted-printable\s*/gi, "")
+
+  // Remove Content-Type headers for text/plain with charset utf-8
+  cleaned = cleaned.replace(/Content-Type:\s*text\/plain[^;]*;?\s*charset=["']?utf-8["']?/gi, "")
+  cleaned = cleaned.replace(/Content-Type:\s*text\/plain[^;]*;?\s*charset=["']?UTF-8["']?/gi, "")
+
   // Decode HTML entities
   cleaned = cleaned
     .replace(/&nbsp;/g, " ")
@@ -163,6 +175,8 @@ const cleanText = (text: string): string => {
     .replace(/[ \t]+/g, " ") // Multiple spaces/tabs to single space
     .replace(/[ \t]+\n/g, "\n") // Remove trailing spaces
     .replace(/\n[ \t]+/g, "\n") // Remove leading spaces after newline
+    .replace(/^\s*$/gm, "") // Remove empty lines
+    .replace(/\n{3,}/g, "\n\n") // Clean up multiple newlines again after removing empty lines
     .trim()
 
   return cleaned
@@ -279,8 +293,8 @@ export default function EmlTextExtractor() {
       return
     }
 
-    // Combine all plain texts with _SPT8 separator
-    const combinedText = completedFiles.map((file) => file.plainText.trim()).join("\n_SPT8\n")
+    // Combine all plain texts with _SPT_ separator
+    const combinedText = completedFiles.map((file) => file.plainText.trim()).join("\n_SPT_\n")
 
     const timestamp = new Date().toISOString().split("T")[0]
     const blob = new Blob([combinedText], {
@@ -485,7 +499,7 @@ export default function EmlTextExtractor() {
                 <li>Upload up to 50 .eml email files</li>
                 <li>Each email is processed to extract plain text content</li>
                 <li>Headers and HTML are automatically removed</li>
-                <li>All extracted texts are combined with "_SPT8" separator</li>
+                <li>All extracted texts are combined with "_SPT_" separator</li>
                 <li>Download the combined text file</li>
               </ul>
             </div>
