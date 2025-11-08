@@ -287,8 +287,8 @@ export default function EmlTextExtractor() {
       return
     }
 
-    // Combine all plain texts with _SPT_ separator
-    const combinedText = completedFiles.map((file) => file.plainText.trim()).join("\n__SPT__\n")
+    // Combine all plain texts with __SEP__ separator
+    const combinedText = completedFiles.map((file) => file.plainText.trim()).join("\n__SEP__\n")
 
     const timestamp = new Date().toISOString().split("T")[0]
     const blob = new Blob([combinedText], {
@@ -488,7 +488,7 @@ export default function EmlTextExtractor() {
                 <li>Upload up to 50 .eml email files</li>
                 <li>Each email is processed to extract plain text content</li>
                 <li>Headers and HTML are automatically removed</li>
-                <li>All extracted texts are combined with "_SPT_" separator</li>
+                <li>All extracted texts are combined with "__SEP__" separator</li>
                 <li>Download the combined text file</li>
               </ul>
             </div>
