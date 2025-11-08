@@ -7,6 +7,7 @@ import Image from "next/image"
 import Link from "next/link"
 import gsap from "gsap"
 import { ScrollTrigger } from "gsap/ScrollTrigger"
+import HeroSection from "@/components/Layouts/HeroSection"
 
 const page = () => {
   const [isMounted, setIsMounted] = useState(false)
@@ -468,6 +469,11 @@ const page = () => {
             </Button>
           </div>
         </div>
+      </div>
+
+      {/* Tools Section */}
+      <div className="relative z-10 mt-20 md:mt-32">
+        <HeroSection />
       </div>
     </section>
   )
