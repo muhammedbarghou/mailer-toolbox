@@ -16,137 +16,115 @@ interface ProcessedFile {
   error?: string
 }
 
-// Extract plain text from email content
-const extractPlainText = (emailContent: string): string => {
-  const lines = emailContent.split("\n")
-  let inHeader = true
-  let boundary = ""
-  let foundPlainText = false
-  const plainTextContent: string[] = []
-  let currentPart: string[] = []
-  let inPart = false
-  let partContentType = ""
+type ParsedHeaders = Record<string, string>
 
-  // Find main boundary
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    const lowerLine = line.toLowerCase()
-
-    if (lowerLine.startsWith("content-type:")) {
-      const boundaryMatch = line.match(/boundary=["']?([^"'\s]+)["']?/i)
-      if (boundaryMatch && !boundary) {
-        boundary = boundaryMatch[1]
-      }
-    }
-
-    // Detect end of headers
-    if (inHeader && line.trim() === "") {
-      inHeader = false
-      continue
-    }
-
-    // Skip headers
-    if (inHeader) {
-      continue
-    }
-
-    // Handle multipart messages
-    if (boundary) {
-      // Check for boundary markers
-      if (line.includes(`--${boundary}`)) {
-        // If we were in a part, process it
-        if (inPart && currentPart.length > 0) {
-          const partText = currentPart.join("\n")
-          // Check if this part is plain text
-          if (partContentType.includes("text/plain") || !partContentType.includes("text/html")) {
-            const cleaned = cleanText(partText)
-            if (cleaned.trim()) {
-              plainTextContent.push(cleaned)
-              foundPlainText = true
-            }
-          }
-          currentPart = []
-          partContentType = ""
-        }
-
-        // Check if this is the end boundary
-        if (line.includes(`--${boundary}--`)) {
-          break
-        }
-
-        inPart = true
-        continue
-      }
-
-      // If we're in a part, check for content-type
-      if (inPart && lowerLine.startsWith("content-type:")) {
-        partContentType = lowerLine
-        // Skip until empty line (end of part headers)
-        while (i + 1 < lines.length && lines[i + 1].trim() !== "") {
-          i++
-        }
-        continue
-      }
-
-      // Collect part content
-      if (inPart) {
-        currentPart.push(line)
-      }
-    } else {
-      // Simple email without multipart - collect all body content
-      plainTextContent.push(line)
-    }
-  }
-
-  // Process last part if exists
-  if (inPart && currentPart.length > 0) {
-    const partText = currentPart.join("\n")
-    if (partContentType.includes("text/plain") || !partContentType.includes("text/html")) {
-      const cleaned = cleanText(partText)
-      if (cleaned.trim()) {
-        plainTextContent.push(cleaned)
-        foundPlainText = true
-      }
-    }
-  }
-
-  // If no plain text found in multipart, use all body content
-  if (!foundPlainText && plainTextContent.length === 0) {
-    // Fallback: extract from simple body
-    let bodyStart = false
-    for (let i = 0; i < lines.length; i++) {
-      if (!inHeader && bodyStart) {
-        plainTextContent.push(lines[i])
-      }
-      if (inHeader && lines[i].trim() === "") {
-        inHeader = false
-        bodyStart = true
-      }
-      if (inHeader) continue
-    }
-  }
-
-  const combinedText = plainTextContent.join("\n")
-  return cleanText(combinedText)
+interface EmailSection {
+  headers: ParsedHeaders
+  body: string
 }
 
-// Clean and process text content
-const cleanText = (text: string): string => {
-  // Remove HTML tags
-  let cleaned = text.replace(/<[^>]*>/g, "")
+const normalizeEmailContent = (value: string): string => value.replace(/\r\n?/g, "\n")
 
-  // Matches lines starting with -- followed by any alphanumeric characters, hyphens, or underscores
-  cleaned = cleaned.replace(/^--[a-zA-Z0-9\-_=]+$/gm, "")
+const parseHeaders = (rawHeaders: string[]): ParsedHeaders => {
+  const headerMap: ParsedHeaders = {}
+  let currentKey = ""
 
-  // Remove Content-Transfer-Encoding headers (with or without surrounding text)
-  cleaned = cleaned.replace(/Content-Transfer-Encoding:\s*quoted-printable/gi, "")
-  cleaned = cleaned.replace(/Content-Transfer-Encoding:\s*quoted-printable\s*/gi, "")
+  for (const rawLine of rawHeaders) {
+    if (rawLine.trim() === "") {
+      continue
+    }
 
-  // Remove Content-Type headers for text/plain with charset utf-8
-  cleaned = cleaned.replace(/Content-Type:\s*text\/plain[^;]*;?\s*charset=["']?utf-8["']?/gi, "")
-  cleaned = cleaned.replace(/Content-Type:\s*text\/plain[^;]*;?\s*charset=["']?UTF-8["']?/gi, "")
+    if (/^\s/.test(rawLine) && currentKey) {
+      headerMap[currentKey] = `${headerMap[currentKey]} ${rawLine.trim()}`
+      continue
+    }
 
-  // Decode HTML entities
+    const separatorIndex = rawLine.indexOf(":")
+    if (separatorIndex === -1) {
+      continue
+    }
+
+    currentKey = rawLine.slice(0, separatorIndex).trim().toLowerCase()
+    const value = rawLine.slice(separatorIndex + 1).trim()
+    headerMap[currentKey] = value
+  }
+
+  return headerMap
+}
+
+const splitHeadersAndBody = (emailContent: string): EmailSection => {
+  const lines = emailContent.split("\n")
+  const headerLines: string[] = []
+  let bodyStartIndex = lines.length
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (line.trim() === "") {
+      bodyStartIndex = i + 1
+      break
+    }
+    headerLines.push(line)
+  }
+
+  if (bodyStartIndex === lines.length) {
+    return { headers: {}, body: emailContent }
+  }
+
+  const headers = parseHeaders(headerLines)
+  const body = lines.slice(bodyStartIndex).join("\n")
+
+  return { headers, body }
+}
+
+const getHeaderValue = (headers: ParsedHeaders, key: string): string => headers[key.toLowerCase()] ?? ""
+
+const getBoundary = (headers: ParsedHeaders): string => {
+  const contentType = getHeaderValue(headers, "content-type").toLowerCase()
+  if (!contentType.includes("boundary=")) {
+    return ""
+  }
+
+  const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/)
+  if (!boundaryMatch) {
+    return ""
+  }
+
+  return (boundaryMatch[1] ?? boundaryMatch[2] ?? "").trim()
+}
+
+const splitMultipartBody = (body: string, boundary: string): EmailSection[] => {
+  if (!boundary) {
+    return []
+  }
+
+  const boundaryMarker = `--${boundary}`
+  const rawParts = body.split(boundaryMarker)
+  rawParts.shift()
+
+  return rawParts
+    .map((part) => part.replace(/^\s*--/, "").trim())
+    .filter((part) => part && part !== "--")
+    .map((part) => splitHeadersAndBody(part))
+}
+
+const decodeQuotedPrintable = (value: string): string => {
+  const normalized = value.replace(/=\r?\n/g, "")
+  return normalized.replace(/=([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+}
+
+const cleanText = (value: string): string => {
+  if (!value.trim()) {
+    return ""
+  }
+
+  let cleaned = value
+    .replace(/<[^>]*>/g, "")
+    .replace(/^--[a-zA-Z0-9\-_=]+$/gm, "")
+    .replace(/Content-Transfer-Encoding:[^\n]*\n?/gi, "")
+    .replace(/Content-Type:[^\n]*\n?/gi, "")
+    .replace(/[A-Za-z0-9+/]{80,}={0,2}/g, "")
+    .replace(/\r/g, "\n")
+
   cleaned = cleaned
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
@@ -160,25 +138,71 @@ const cleanText = (text: string): string => {
     .replace(/&#x60;/g, "`")
     .replace(/&#x3D;/g, "=")
 
-  // Remove base64 encoded content (long strings of base64)
-  cleaned = cleaned.replace(/[A-Za-z0-9+/]{80,}={0,2}/g, "")
-
-  // Remove quoted-printable encoding markers
-  cleaned = cleaned.replace(/=\r?\n/g, "").replace(/=[0-9A-F]{2}/g, "")
-
-  // Clean up whitespace
   cleaned = cleaned
-    .replace(/\r\n/g, "\n") // Normalize line endings
-    .replace(/\r/g, "\n")
-    .replace(/\n{3,}/g, "\n\n") // Multiple newlines to double
-    .replace(/[ \t]+/g, " ") // Multiple spaces/tabs to single space
-    .replace(/[ \t]+\n/g, "\n") // Remove trailing spaces
-    .replace(/\n[ \t]+/g, "\n") // Remove leading spaces after newline
-    .replace(/^\s*$/gm, "") // Remove empty lines
-    .replace(/\n{3,}/g, "\n\n") // Clean up multiple newlines again after removing empty lines
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/^\s*$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
     .trim()
 
   return cleaned
+}
+
+const collectPlainTextSections = (section: EmailSection, collectedSections: string[]): void => {
+  const contentType = getHeaderValue(section.headers, "content-type").toLowerCase()
+  const transferEncoding = getHeaderValue(section.headers, "content-transfer-encoding").toLowerCase()
+
+  if (contentType.startsWith("multipart/")) {
+    const boundary = getBoundary(section.headers)
+    const childSections = splitMultipartBody(section.body, boundary)
+    if (childSections.length === 0) {
+      return
+    }
+
+    for (const childSection of childSections) {
+      collectPlainTextSections(childSection, collectedSections)
+    }
+    return
+  }
+
+  const isPlainText = !contentType || contentType.includes("text/plain")
+  if (!isPlainText) {
+    return
+  }
+
+  if (transferEncoding.includes("base64")) {
+    return
+  }
+
+  let resolvedBody = section.body
+  if (transferEncoding.includes("quoted-printable")) {
+    resolvedBody = decodeQuotedPrintable(resolvedBody)
+  }
+
+  const cleaned = cleanText(resolvedBody)
+  if (!cleaned) {
+    return
+  }
+
+  collectedSections.push(cleaned)
+}
+
+const extractPlainText = (rawEmailContent: string): string => {
+  const normalizedContent = normalizeEmailContent(rawEmailContent)
+  const rootSection = splitHeadersAndBody(normalizedContent)
+  const collectedSections: string[] = []
+
+  collectPlainTextSections(rootSection, collectedSections)
+
+  if (collectedSections.length === 0 && !getHeaderValue(rootSection.headers, "content-type")) {
+    const fallback = cleanText(rootSection.body)
+    if (fallback) {
+      collectedSections.push(fallback)
+    }
+  }
+
+  return collectedSections.join("\n\n")
 }
 
 export default function EmlTextExtractor() {
