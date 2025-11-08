@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { InboxIcon, ZapIcon, PanelsRightBottom, ImageIcon, Menu } from "lucide-react"
+import { InboxIcon, ZapIcon, PanelsRightBottom, ImageIcon, Menu, RewindIcon } from "lucide-react"
 import Logo from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import {
@@ -25,6 +25,7 @@ const navigationLinks = [
   { href: "/ip-comparator", label: "IP Comparator", icon: ZapIcon },
   { href: "/photo-editor", label: "Images Toolkit", icon: PanelsRightBottom },
   { href: "/html-to-img", label: "HTML to Image", icon: ImageIcon },
+  { href: "/rewrite", label: "AI Email Rewriter", icon: RewindIcon },
 ]
 
 export default function Navbar() {
