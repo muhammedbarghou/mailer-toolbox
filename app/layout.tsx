@@ -30,7 +30,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="light" style={{colorScheme:"light"}}>
-      <body>
+      <body suppressHydrationWarning>
         <ThemeProvider
             attribute="class"
             defaultTheme="system"
@@ -38,7 +38,7 @@ export default function RootLayout({
             disableTransitionOnChange
           >
         <Navbar />
-          <main className="grow px-4 md:px-6 py-4">
+          <main className="grow px-4 md:px-6 py-4 overflow-auto">
           {children}
           </main>
           <Footer />

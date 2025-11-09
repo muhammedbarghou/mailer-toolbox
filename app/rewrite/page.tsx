@@ -22,6 +22,7 @@ import {
   Database,
   ArrowRight,
   FileCode,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -90,6 +91,18 @@ export default function RewritePage() {
     } catch (error) {
       console.error("Failed to copy to clipboard:", error);
       toast.error("Failed to copy to clipboard. Please try again.");
+    }
+  };
+
+  const handlePreview = () => {
+    if (!rewrittenHtml) return;
+
+    const previewWindow = window.open("", "_blank");
+    if (previewWindow) {
+      previewWindow.document.write(rewrittenHtml);
+      previewWindow.document.close();
+    } else {
+      toast.error("Please allow popups to preview the HTML");
     }
   };
 
@@ -252,15 +265,26 @@ export default function RewritePage() {
                     className="min-h-[450px] font-mono text-sm resize-none bg-muted/30 border-2"
                   />
                 </div>
-                <Button
-                  onClick={handleCopy}
-                  variant="outline"
-                  className="w-full h-11 text-base font-semibold border-2 hover:bg-primary/10 hover:border-primary/50 transition-all duration-200"
-                  size="lg"
-                >
-                  <Copy className="mr-2 h-4 w-4" />
-                  Copy to Clipboard
-                </Button>
+                <div className="flex gap-3">
+                  <Button
+                    onClick={handlePreview}
+                    variant="outline"
+                    className="flex-1 h-11 text-base font-semibold border-2 hover:bg-primary/10 hover:border-primary/50 transition-all duration-200"
+                    size="lg"
+                  >
+                    <Eye className="mr-2 h-4 w-4" />
+                    Preview HTML
+                  </Button>
+                  <Button
+                    onClick={handleCopy}
+                    variant="outline"
+                    className="flex-1 h-11 text-base font-semibold border-2 hover:bg-primary/10 hover:border-primary/50 transition-all duration-200"
+                    size="lg"
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy to Clipboard
+                  </Button>
+                </div>
               </>
             ) : (
               <div className="flex items-center justify-center min-h-[450px] text-muted-foreground">
