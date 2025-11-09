@@ -7,6 +7,8 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from 'sonner'
 import CookieConsentBanner from "@/components/cookie-consent-banner"
 import { Analytics } from "@vercel/analytics/next"
+import { AuthProvider } from "@/contexts/AuthContext"
+import AuthenticatedLayout from "@/components/Layouts/AuthenticatedLayout"
 
 
 const geistSans = Geist({
@@ -37,14 +39,18 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-        <Navbar />
-          <main className="grow px-4 md:px-6 py-4 overflow-auto">
-          {children}
+        <AuthProvider>
+          <Navbar />
+          <main className="grow overflow-auto">
+            <AuthenticatedLayout>
+              {children}
+            </AuthenticatedLayout>
           </main>
           <Footer />
           <Toaster position="bottom-right" />
           <CookieConsentBanner />
           <Analytics />
+        </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

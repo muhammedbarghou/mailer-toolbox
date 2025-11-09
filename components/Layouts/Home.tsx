@@ -7,10 +7,13 @@ import Image from "next/image"
 import Link from "next/link"
 import gsap from "gsap"
 import { ScrollTrigger } from "gsap/ScrollTrigger"
-import HeroSection from "@/components/Layouts/HeroSection"
+import { useAuth } from "@/contexts/AuthContext"
+import { useRouter } from "next/navigation"
 
 const Home = () => {
   const [isMounted, setIsMounted] = useState(false)
+  const { user, loading } = useAuth()
+  const router = useRouter()
   const containerRef = useRef<HTMLDivElement>(null)
   const logoRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
@@ -471,9 +474,50 @@ const Home = () => {
         </div>
       </div>
 
-      {/* Tools Section */}
+      {/* Call to Action Section */}
       <div className="relative z-10 mt-20 md:mt-32">
-        <HeroSection />
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="text-muted-foreground">Loading...</div>
+          </div>
+        ) : !user ? (
+          <div className="w-full py-20">
+            <div className="container mx-auto px-4 md:px-6">
+              <div className="flex flex-col items-center justify-center text-center space-y-6 max-w-2xl mx-auto">
+                <div className="space-y-2">
+                  <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
+                    Get Started Today
+                  </h2>
+                  <p className="text-muted-foreground text-lg">
+                    Sign in to access our comprehensive suite of email and IP tools designed to streamline your workflow.
+                  </p>
+                </div>
+                <Button
+                  size="lg"
+                  onClick={() => router.push("/auth")}
+                  className="mt-4"
+                >
+                  Sign In to Get Started
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="w-full py-20">
+            <div className="container mx-auto px-4 md:px-6">
+              <div className="flex flex-col items-center justify-center text-center space-y-6 max-w-2xl mx-auto">
+                <div className="space-y-2">
+                  <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
+                    Welcome Back!
+                  </h2>
+                  <p className="text-muted-foreground text-lg">
+                    Access all your tools from the sidebar. Get started by selecting a tool from the menu.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   )
