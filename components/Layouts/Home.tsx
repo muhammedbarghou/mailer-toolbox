@@ -23,6 +23,13 @@ const Home = () => {
   const backgroundRef = useRef<HTMLDivElement>(null)
   const floatingElementsRef = useRef<HTMLDivElement[]>([])
 
+  // Redirect authenticated users to /home
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace("/home")
+    }
+  }, [user, loading, router])
+
   useEffect(() => {
     setIsMounted(true)
   }, [])
