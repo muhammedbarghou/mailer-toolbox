@@ -23,11 +23,56 @@ const HtmlToImagePage = () => {
 
     setIsConverting(true)
     
+    const element = previewRef.current
+    const convertFn = imageFormat === 'png' ? toPng : toJpeg
+    const fileExtension = imageFormat === 'png' ? 'png' : 'jpg'
+    
+    // Store original styles to restore later
+    const originalStyles = {
+      width: element.style.width,
+      height: element.style.height,
+      maxWidth: element.style.maxWidth,
+      maxHeight: element.style.maxHeight,
+      overflow: element.style.overflow,
+    }
+    
+    // Get the parent container to check its constraints
+    const parent = element.parentElement
+    const parentOriginalStyles = parent ? {
+      overflow: parent.style.overflow,
+      maxWidth: parent.style.maxWidth,
+      maxHeight: parent.style.maxHeight,
+    } : null
+    
     try {
-      const convertFn = imageFormat === 'png' ? toPng : toJpeg
-      const fileExtension = imageFormat === 'png' ? 'png' : 'jpg'
+      // Temporarily remove constraints to get full dimensions
+      element.style.width = 'auto'
+      element.style.height = 'auto'
+      element.style.maxWidth = 'none'
+      element.style.maxHeight = 'none'
+      element.style.overflow = 'visible'
       
-      const dataUrl = await convertFn(previewRef.current, {
+      if (parent) {
+        parent.style.overflow = 'visible'
+        parent.style.maxWidth = 'none'
+        parent.style.maxHeight = 'none'
+      }
+      
+      // Wait for layout to update
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // Get the actual scroll dimensions of the content
+      const scrollWidth = Math.max(element.scrollWidth, element.offsetWidth)
+      const scrollHeight = Math.max(element.scrollHeight, element.offsetHeight)
+      
+      // Set explicit dimensions to ensure full capture
+      element.style.width = `${scrollWidth}px`
+      element.style.height = `${scrollHeight}px`
+      
+      // Wait for layout to update again
+      await new Promise(resolve => setTimeout(resolve, 50))
+      
+      const dataUrl = await convertFn(element, {
         backgroundColor: '#ffffff',
         pixelRatio: 2,
         quality: imageFormat === 'jpeg' ? 0.95 : 1,
@@ -40,10 +85,23 @@ const HtmlToImagePage = () => {
       link.click()
 
       toast.success(`Image downloaded as ${fileExtension.toUpperCase()}!`)
-      setIsConverting(false)
     } catch (error) {
       console.error('Error converting HTML to image:', error)
       toast.error('Failed to convert HTML to image. Please try again.')
+    } finally {
+      // Always restore original styles
+      element.style.width = originalStyles.width || ''
+      element.style.height = originalStyles.height || ''
+      element.style.maxWidth = originalStyles.maxWidth || ''
+      element.style.maxHeight = originalStyles.maxHeight || ''
+      element.style.overflow = originalStyles.overflow || ''
+      
+      if (parent && parentOriginalStyles) {
+        parent.style.overflow = parentOriginalStyles.overflow || ''
+        parent.style.maxWidth = parentOriginalStyles.maxWidth || ''
+        parent.style.maxHeight = parentOriginalStyles.maxHeight || ''
+      }
+      
       setIsConverting(false)
     }
   }
