@@ -325,7 +325,7 @@ export default function EmailHeaderProcessor() {
         return
       }
 
-      if (files.length + fileArray.length > 20) {
+      if (files.length + fileArray.length > 50) {
         alert("Maximum 20 files allowed")
         return
       }
