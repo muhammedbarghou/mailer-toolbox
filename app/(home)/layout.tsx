@@ -5,6 +5,11 @@ export default function HomeLayout({
 }: {
   children: React.ReactNode
 }) {
-  return <ProtectedRoute>{children}</ProtectedRoute>
+  return 
+  <main>
+    <ProtectedRoute>
+      {children}
+    </ProtectedRoute>
+  </main>
 }
 
