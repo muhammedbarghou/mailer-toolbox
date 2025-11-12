@@ -16,6 +16,7 @@ import {
   Zap,
   TrendingUp,
   Clock,
+  Layers,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -55,6 +56,15 @@ const tools = [
     color: "from-yellow-500/10 to-amber-500/10",
     iconColor: "text-yellow-500",
     borderColor: "border-yellow-500/20",
+  },
+  {
+    href: "/email-source-separator",
+    title: "Email Source Separator",
+    description: "Separate email headers, plain text, and HTML parts. Select which parts to keep and download the modified email source as a text file.",
+    icon: Layers,
+    color: "from-violet-500/10 to-purple-500/10",
+    iconColor: "text-violet-500",
+    borderColor: "border-violet-500/20",
   },
   {
     href: "/html-to-img",

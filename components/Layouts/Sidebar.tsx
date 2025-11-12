@@ -12,6 +12,7 @@ import {
   PanelsRightBottom,
   Scissors,
   X,
+  Layers,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/AuthContext"
@@ -40,6 +41,12 @@ const tools = [
     title: "EML Text Extractor",
     icon: Scissors,
     color: "text-yellow-500",
+  },
+  {
+    href: "/email-source-separator",
+    title: "Email Source Separator",
+    icon: Layers,
+    color: "text-violet-500",
   },
   {
     href: "/html-to-img",
