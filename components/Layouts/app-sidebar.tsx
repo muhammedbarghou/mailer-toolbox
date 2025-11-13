@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { FileText, Inbox, Network, ImageIcon, Sparkles, PanelsRightBottom, Scissors, Layers, Home } from "lucide-react"
+import { FileText, Inbox, Network, ImageIcon, Sparkles, PanelsRightBottom, Scissors, Layers, Home, Mail } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -25,6 +25,11 @@ const toolCategories = [
         title: "AI Email Rewriter",
         icon: Sparkles,
         badge: "Popular",
+      },
+      {
+        href: "/subject-rewrite",
+        title: "Subject Line Rewriter",
+        icon: Mail,
       },
       {
         href: "/header-processor",

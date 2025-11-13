@@ -17,6 +17,8 @@ import {
   TrendingUp,
   Clock,
   Layers,
+  Mail,
+  Star,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -93,6 +95,7 @@ const tools = [
     iconColor: "text-teal-500",
     borderColor: "border-teal-500/20",
   },
+  
 ]
 
 export default function DashboardPage() {
@@ -105,11 +108,11 @@ export default function DashboardPage() {
       {/* Welcome Header */}
       <div className="mb-8 md:mb-12">
         <div className="flex items-center gap-4 mb-6">
-          <div className="p-3 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/20 shadow-sm">
+          <div className="p-3 rounded-xl bg-linear-to-br from-primary/20 to-primary/10 border border-primary/20 shadow-sm">
             <Zap className="h-7 w-7 text-primary" />
           </div>
           <div className="flex-1">
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight bg-linear-to-r from-foreground to-foreground/70 bg-clip-text">
               Welcome back, {userName}!
             </h1>
             <p className="text-muted-foreground text-base md:text-lg mt-2">
@@ -118,6 +121,60 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* New Tool Banner */}
+      <Card className="relative overflow-hidden border-2 border-primary/30 bg-linear-to-br from-primary/10 via-primary/5 to-primary/10 mb-8 md:mb-12 group hover:shadow-xl hover:border-primary/50 transition-all duration-300">
+        <div className="absolute inset-0 bg-linear-to-r from-primary/5 via-transparent to-primary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+        <CardContent className="relative z-10 p-6 md:p-8">
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
+            <div className="shrink-0">
+              <div className="relative">
+                <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full animate-pulse" />
+                <div className="relative p-4 rounded-xl bg-linear-to-br from-primary/20 to-primary/10 border border-primary/30">
+                  <Mail className="h-8 w-8 text-primary" />
+                </div>
+              </div>
+            </div>
+            <div className="flex-1 space-y-3">
+              <div className="flex items-center gap-2">
+                <Star className="h-5 w-5 text-primary fill-primary" />
+                <span className="text-sm font-semibold text-primary">New Tool</span>
+              </div>
+              <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
+                AI Subject Line Rewriter
+              </h2>
+              <p className="text-muted-foreground text-base md:text-lg leading-relaxed max-w-2xl">
+                Transform spam-triggering subject lines into deliverable, high-performing alternatives. 
+                Get 20 optimized versions for each input subject line with AI-powered spam filter bypass technology.
+              </p>
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <Button
+                  asChild
+                  size="lg"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-200"
+                >
+                  <Link href="/subject-rewrite" className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4" />
+                    Try It Now
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-1.5">
+                    <Zap className="h-4 w-4 text-primary" />
+                    <span>20 alternatives per line</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <TrendingUp className="h-4 w-4 text-primary" />
+                    <span>Higher deliverability</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-12">
