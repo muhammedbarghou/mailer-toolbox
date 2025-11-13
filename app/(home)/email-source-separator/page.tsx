@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { toast } from "sonner"
+import JSZip from "jszip"
 import {
   Upload,
   Download,
@@ -30,6 +31,7 @@ interface ProcessedFile {
   keepHeader: boolean
   keepPlainText: boolean
   keepHtml: boolean
+  selected: boolean
 }
 
 type ParsedHeaders = Record<string, string>
@@ -50,13 +52,16 @@ const parseHeaders = (rawHeaders: string[]): ParsedHeaders => {
       continue
     }
 
-    if (/^\s/.test(rawLine) && currentKey) {
-      headerMap[currentKey] = `${headerMap[currentKey]} ${rawLine.trim()}`
+    // Handle folded headers (RFC 2822): lines starting with whitespace continue the previous header
+    if (/^[\s\t]/.test(rawLine) && currentKey) {
+      // Preserve the folding whitespace but normalize it
+      headerMap[currentKey] = `${headerMap[currentKey]}${rawLine.replace(/^[\s\t]+/, " ")}`
       continue
     }
 
     const separatorIndex = rawLine.indexOf(":")
     if (separatorIndex === -1) {
+      // If no colon and not a continuation, skip this line
       continue
     }
 
@@ -73,9 +78,12 @@ const splitHeadersAndBody = (emailContent: string): EmailSection => {
   const headerLines: string[] = []
   let bodyStartIndex = lines.length
 
+  // More precise header/body separation
+  // Headers end with an empty line (RFC 2822)
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    if (line.trim() === "") {
+    // Empty line marks end of headers
+    if (line.trim() === "" || (line === "\r" && i > 0)) {
       bodyStartIndex = i + 1
       break
     }
@@ -100,12 +108,18 @@ const getBoundary = (headers: ParsedHeaders): string => {
     return ""
   }
 
-  const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/)
+  // More precise boundary extraction: handle quoted and unquoted boundaries
+  // Also handle boundaries with semicolons and other parameters
+  const boundaryMatch = contentType.match(/boundary\s*=\s*(?:"([^"]+)"|([^;\s]+))/i)
   if (!boundaryMatch) {
     return ""
   }
 
-  return (boundaryMatch[1] ?? boundaryMatch[2] ?? "").trim()
+  let boundary = (boundaryMatch[1] ?? boundaryMatch[2] ?? "").trim()
+  // Remove trailing semicolons or commas that might be part of the boundary
+  boundary = boundary.replace(/[;,]+$/, "")
+  
+  return boundary
 }
 
 const splitMultipartBody = (body: string, boundary: string): EmailSection[] => {
@@ -113,24 +127,76 @@ const splitMultipartBody = (body: string, boundary: string): EmailSection[] => {
     return []
   }
 
+  // More precise boundary splitting
+  // RFC 2046: boundaries are preceded by CRLF or just LF, and may have trailing dashes
   const boundaryMarker = `--${boundary}`
-  const rawParts = body.split(boundaryMarker)
-  rawParts.shift()
+  const escapedBoundary = boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const boundaryPattern = new RegExp(`(?:^|\\r?\\n)--${escapedBoundary}(?:--)?(?:\\r?\\n|$)`, "gm")
+  
+  const parts: string[] = []
+  const matches: Array<{ index: number; length: number }> = []
+  
+  // Find all boundary positions
+  let match: RegExpExecArray | null
+  while ((match = boundaryPattern.exec(body)) !== null) {
+    matches.push({ index: match.index, length: match[0].length })
+  }
+  
+  if (matches.length === 0) {
+    return []
+  }
+  
+  // Extract parts between boundaries
+  for (let i = 0; i < matches.length - 1; i++) {
+    const start = matches[i].index + matches[i].length
+    const end = matches[i + 1].index
+    const part = body.slice(start, end).trim()
+    if (part && !part.startsWith("--")) {
+      parts.push(part)
+    }
+  }
+  
+  // Handle last part (after final boundary)
+  const lastMatch = matches[matches.length - 1]
+  const lastPart = body.slice(lastMatch.index + lastMatch.length).trim()
+  if (lastPart && !lastPart.startsWith("--")) {
+    parts.push(lastPart)
+  }
 
-  return rawParts
-    .map((part) => part.replace(/^\s*--/, "").trim())
+  return parts
     .filter((part) => part && part !== "--")
     .map((part) => splitHeadersAndBody(part))
 }
 
 const decodeQuotedPrintable = (value: string): string => {
-  const normalized = value.replace(/=\r?\n/g, "")
-  return normalized.replace(/=([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+  // More precise quoted-printable decoding
+  // Remove soft line breaks (=\r\n or =\n)
+  let normalized = value.replace(/=\r?\n/g, "")
+  
+  // Decode hex sequences (=XX)
+  normalized = normalized.replace(/=([0-9A-F]{2})/gi, (_, hex) => {
+    try {
+      return String.fromCharCode(parseInt(hex, 16))
+    } catch {
+      return `=${hex}`
+    }
+  })
+  
+  // Handle spaces at end of line (should be encoded as =20)
+  normalized = normalized.replace(/= /g, " ")
+  
+  return normalized
 }
 
 const decodeBase64 = (value: string): string => {
   try {
-    return atob(value.replace(/\s/g, ""))
+    // Remove all whitespace for base64 decoding
+    const cleaned = value.replace(/[\s\r\n]/g, "")
+    // Validate base64 string
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(cleaned)) {
+      return value
+    }
+    return atob(cleaned)
   } catch {
     return value
   }
@@ -139,6 +205,12 @@ const decodeBase64 = (value: string): string => {
 const extractTextContent = (section: EmailSection, collectedSections: string[]): void => {
   const contentType = getHeaderValue(section.headers, "content-type").toLowerCase()
   const transferEncoding = getHeaderValue(section.headers, "content-transfer-encoding").toLowerCase()
+  const contentDisposition = getHeaderValue(section.headers, "content-disposition").toLowerCase()
+
+  // Skip attachments
+  if (contentDisposition.includes("attachment")) {
+    return
+  }
 
   if (contentType.startsWith("multipart/")) {
     const boundary = getBoundary(section.headers)
@@ -153,7 +225,12 @@ const extractTextContent = (section: EmailSection, collectedSections: string[]):
     return
   }
 
-  const isPlainText = !contentType || contentType.includes("text/plain")
+  // More precise plain text detection
+  const isPlainText = 
+    !contentType || 
+    contentType.includes("text/plain") ||
+    (contentType.includes("text/") && !contentType.includes("text/html"))
+
   if (!isPlainText) {
     return
   }
@@ -163,6 +240,9 @@ const extractTextContent = (section: EmailSection, collectedSections: string[]):
     resolvedBody = decodeQuotedPrintable(resolvedBody)
   } else if (transferEncoding.includes("base64")) {
     resolvedBody = decodeBase64(resolvedBody)
+  } else if (transferEncoding.includes("7bit") || transferEncoding.includes("8bit")) {
+    // 7bit and 8bit are already decoded, just use as-is
+    resolvedBody = section.body
   }
 
   if (resolvedBody.trim()) {
@@ -173,6 +253,12 @@ const extractTextContent = (section: EmailSection, collectedSections: string[]):
 const extractHtmlContent = (section: EmailSection, collectedSections: string[]): void => {
   const contentType = getHeaderValue(section.headers, "content-type").toLowerCase()
   const transferEncoding = getHeaderValue(section.headers, "content-transfer-encoding").toLowerCase()
+  const contentDisposition = getHeaderValue(section.headers, "content-disposition").toLowerCase()
+
+  // Skip attachments
+  if (contentDisposition.includes("attachment")) {
+    return
+  }
 
   if (contentType.startsWith("multipart/")) {
     const boundary = getBoundary(section.headers)
@@ -187,7 +273,9 @@ const extractHtmlContent = (section: EmailSection, collectedSections: string[]):
     return
   }
 
+  // More precise HTML detection
   const isHtml = contentType.includes("text/html")
+
   if (!isHtml) {
     return
   }
@@ -197,6 +285,9 @@ const extractHtmlContent = (section: EmailSection, collectedSections: string[]):
     resolvedBody = decodeQuotedPrintable(resolvedBody)
   } else if (transferEncoding.includes("base64")) {
     resolvedBody = decodeBase64(resolvedBody)
+  } else if (transferEncoding.includes("7bit") || transferEncoding.includes("8bit")) {
+    // 7bit and 8bit are already decoded, just use as-is
+    resolvedBody = section.body
   }
 
   if (resolvedBody.trim()) {
@@ -316,6 +407,7 @@ export default function EmailSourceSeparator() {
         keepHeader: true,
         keepPlainText: true,
         keepHtml: true,
+        selected: true,
       }
 
       newProcessedFiles.push(processedFile)
@@ -376,6 +468,22 @@ export default function EmailSourceSeparator() {
     )
   }, [])
 
+  const handleToggleFileSelection = useCallback((fileId: string) => {
+    setProcessedFiles((prev) =>
+      prev.map((pf) => (pf.id === fileId ? { ...pf, selected: !pf.selected } : pf)),
+    )
+  }, [])
+
+  const handleSelectAll = useCallback(() => {
+    const allSelected = processedFiles.every((f) => f.selected)
+    setProcessedFiles((prev) => prev.map((pf) => ({ ...pf, selected: !allSelected })))
+  }, [processedFiles])
+
+  const selectedFiles = useMemo(
+    () => processedFiles.filter((f) => f.selected && f.status === "completed"),
+    [processedFiles],
+  )
+
   const handleDownloadSingle = useCallback(
     (processedFile: ProcessedFile) => {
       const reconstructed = reconstructEmail(
@@ -408,18 +516,17 @@ export default function EmailSourceSeparator() {
     [],
   )
 
-  const handleDownloadAll = useCallback(() => {
-    const completedFiles = processedFiles.filter((f) => f.status === "completed")
-
-    if (completedFiles.length === 0) {
-      toast.error("No processed files to download")
+  const handleDownloadAll = useCallback(async () => {
+    if (selectedFiles.length === 0) {
+      toast.error("No selected files to download. Please select at least one file.")
       return
     }
 
-    const timestamp = new Date().toISOString().split("T")[0]
+    try {
+      const zip = new JSZip()
+      const timestamp = new Date().toISOString().split("T")[0]
 
-    completedFiles.forEach((file, index) => {
-      setTimeout(() => {
+      for (const file of selectedFiles) {
         const reconstructed = reconstructEmail(
           file.header,
           file.plainText,
@@ -430,21 +537,24 @@ export default function EmailSourceSeparator() {
         )
 
         if (reconstructed.trim()) {
-          const blob = new Blob([reconstructed], {
-            type: "text/plain;charset=utf-8",
-          })
-          const url = URL.createObjectURL(blob)
-          const link = document.createElement("a")
-          link.href = url
-          link.download = `${file.name}_${timestamp}.txt`
-          link.click()
-          URL.revokeObjectURL(url)
+          zip.file(`${file.name}_${timestamp}.txt`, reconstructed)
         }
-      }, index * 200)
-    })
+      }
 
-    toast.success(`Downloaded ${completedFiles.length} file(s)`)
-  }, [processedFiles])
+      const zipBlob = await zip.generateAsync({ type: "blob" })
+      const url = URL.createObjectURL(zipBlob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `emails_${timestamp}.zip`
+      link.click()
+      URL.revokeObjectURL(url)
+
+      toast.success(`Downloaded ${selectedFiles.length} file(s) as ZIP`)
+    } catch (error) {
+      console.error("Error creating zip file:", error)
+      toast.error("Failed to create zip file. Please try again.")
+    }
+  }, [selectedFiles])
 
   const handleClearAll = () => {
     clearFiles()
@@ -522,16 +632,28 @@ export default function EmailSourceSeparator() {
         {processedFiles.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Processed Files ({processedFiles.length})</h2>
+              <h2 className="text-lg font-semibold">
+                Processed Files ({processedFiles.length}){" "}
+                {selectedFiles.length > 0 && (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    ({selectedFiles.length} selected)
+                  </span>
+                )}
+              </h2>
               <div className="flex gap-2">
+                {processedFiles.length > 1 && (
+                  <Button size="sm" variant="outline" onClick={handleSelectAll}>
+                    {processedFiles.every((f) => f.selected) ? "Deselect All" : "Select All"}
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="default"
                   onClick={handleDownloadAll}
-                  disabled={completedCount === 0 || isProcessing}
+                  disabled={selectedFiles.length === 0 || isProcessing}
                 >
                   <Download className="w-4 h-4 mr-2" />
-                  Download All ({completedCount})
+                  Download Selected ({selectedFiles.length})
                 </Button>
                 <Button size="sm" variant="outline" onClick={handleClearAll}>
                   Clear All
@@ -541,12 +663,28 @@ export default function EmailSourceSeparator() {
 
             <div className="space-y-3">
               {processedFiles.map((file) => (
-                <Card key={file.id} className="p-4 space-y-3">
+                <Card key={file.id} className={`p-4 space-y-3 ${file.selected ? "ring-2 ring-primary/20" : ""}`}>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-3 overflow-hidden flex-1">
-                      <div className="flex aspect-square size-10 shrink-0 items-center justify-center rounded border">
-                        {getStatusIcon(file.status)}
-                      </div>
+                      {file.status === "completed" && (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleFileSelection(file.id)}
+                          className="flex aspect-square size-10 shrink-0 items-center justify-center rounded border hover:bg-accent transition-colors"
+                          aria-label={file.selected ? "Deselect file" : "Select file"}
+                        >
+                          {file.selected ? (
+                            <CheckSquare className="size-5 text-primary" />
+                          ) : (
+                            <Square className="size-5 text-muted-foreground" />
+                          )}
+                        </button>
+                      )}
+                      {file.status !== "completed" && (
+                        <div className="flex aspect-square size-10 shrink-0 items-center justify-center rounded border">
+                          {getStatusIcon(file.status)}
+                        </div>
+                      )}
                       <div className="flex min-w-0 flex-col gap-0.5 flex-1">
                         <p className="truncate text-[13px] font-medium">{file.name}.eml</p>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -675,8 +813,9 @@ export default function EmailSourceSeparator() {
               <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
                 <li>Upload up to {maxFiles} .eml email files</li>
                 <li>Each email is automatically separated into headers, plain text, and HTML parts</li>
-                <li>Use checkboxes to select which parts you want to keep</li>
-                <li>Download individual files or all files at once</li>
+                <li>Select/deselect files using the checkboxes on the left</li>
+                <li>Use checkboxes to select which parts (header, plain text, HTML) you want to keep for each email</li>
+                <li>Download individual files or download all selected files as a ZIP archive</li>
                 <li>The modified email source is saved as a text file</li>
               </ul>
             </div>
