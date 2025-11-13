@@ -15,6 +15,7 @@ import {
   Loader2,
   CheckSquare,
   Square,
+  Minus,
 } from "lucide-react"
 import { useFileUpload, formatBytes } from "@/hooks/use-file-upload"
 
@@ -479,6 +480,35 @@ export default function EmailSourceSeparator() {
     setProcessedFiles((prev) => prev.map((pf) => ({ ...pf, selected: !allSelected })))
   }, [processedFiles])
 
+  const handleBulkTogglePart = useCallback((part: "keepHeader" | "keepPlainText" | "keepHtml") => {
+    const completedFiles = processedFiles.filter((f) => f.status === "completed")
+    if (completedFiles.length === 0) return
+
+    // Check if all completed files have this part enabled
+    const allEnabled = completedFiles.every((f) => f[part])
+    
+    // Toggle: if all enabled, disable all; otherwise enable all
+    setProcessedFiles((prev) =>
+      prev.map((pf) =>
+        pf.status === "completed" ? { ...pf, [part]: !allEnabled } : pf,
+      ),
+    )
+  }, [processedFiles])
+
+  const getBulkPartState = useCallback((part: "keepHeader" | "keepPlainText" | "keepHtml") => {
+    const completedFiles = processedFiles.filter((f) => f.status === "completed")
+    if (completedFiles.length === 0) return { checked: false, indeterminate: false }
+    
+    const enabledCount = completedFiles.filter((f) => f[part]).length
+    const allEnabled = enabledCount === completedFiles.length
+    const someEnabled = enabledCount > 0 && enabledCount < completedFiles.length
+    
+    return {
+      checked: allEnabled,
+      indeterminate: someEnabled,
+    }
+  }, [processedFiles])
+
   const selectedFiles = useMemo(
     () => processedFiles.filter((f) => f.selected && f.status === "completed"),
     [processedFiles],
@@ -660,6 +690,78 @@ export default function EmailSourceSeparator() {
                 </Button>
               </div>
             </div>
+
+            {/* Bulk Selection Bar */}
+            {completedCount > 0 && (
+              <Card className="p-4 bg-muted/30 border-border">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+                    Bulk Actions:
+                  </span>
+                  <div className="flex flex-wrap gap-4 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => handleBulkTogglePart("keepHeader")}
+                      className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-accent transition-colors"
+                      aria-label="Toggle header for all files"
+                    >
+                      {(() => {
+                        const state = getBulkPartState("keepHeader")
+                        if (state.indeterminate) {
+                          return <Minus className="size-4 text-primary" />
+                        }
+                        return state.checked ? (
+                          <CheckSquare className="size-4 text-primary" />
+                        ) : (
+                          <Square className="size-4 text-muted-foreground" />
+                        )
+                      })()}
+                      <span className="text-sm font-medium">Header</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleBulkTogglePart("keepPlainText")}
+                      className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-accent transition-colors"
+                      aria-label="Toggle plain text for all files"
+                    >
+                      {(() => {
+                        const state = getBulkPartState("keepPlainText")
+                        if (state.indeterminate) {
+                          return <Minus className="size-4 text-primary" />
+                        }
+                        return state.checked ? (
+                          <CheckSquare className="size-4 text-primary" />
+                        ) : (
+                          <Square className="size-4 text-muted-foreground" />
+                        )
+                      })()}
+                      <span className="text-sm font-medium">Plain Text</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleBulkTogglePart("keepHtml")}
+                      className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-accent transition-colors"
+                      aria-label="Toggle HTML for all files"
+                    >
+                      {(() => {
+                        const state = getBulkPartState("keepHtml")
+                        if (state.indeterminate) {
+                          return <Minus className="size-4 text-primary" />
+                        }
+                        return state.checked ? (
+                          <CheckSquare className="size-4 text-primary" />
+                        ) : (
+                          <Square className="size-4 text-muted-foreground" />
+                        )
+                      })()}
+                      <span className="text-sm font-medium">HTML</span>
+                    </button>
+                  </div>
+                </div>
+              </Card>
+            )}
 
             <div className="space-y-3">
               {processedFiles.map((file) => (
