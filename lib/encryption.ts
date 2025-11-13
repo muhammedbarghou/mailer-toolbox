@@ -8,10 +8,23 @@ const KEY_LENGTH = 32; // 32 bytes for AES-256
 const ITERATIONS = 100000; // PBKDF2 iterations
 
 /**
+ * Check if crypto module is available (server-side only)
+ */
+const ensureCryptoAvailable = (): void => {
+  if (typeof crypto === "undefined" || !crypto.randomBytes) {
+    throw new Error(
+      "Crypto module is not available. This function must run server-side only."
+    );
+  }
+};
+
+/**
  * Get encryption key from environment variable
  * Falls back to a default key in development (NOT for production)
  */
 const getEncryptionKey = (): Buffer => {
+  ensureCryptoAvailable();
+  
   const secret = process.env.API_KEY_ENCRYPTION_SECRET;
   
   if (!secret) {
@@ -42,6 +55,7 @@ export const encryptApiKey = (plaintext: string): string => {
   }
 
   try {
+    ensureCryptoAvailable();
     const key = getEncryptionKey();
     
     // Generate random salt and IV
@@ -68,8 +82,18 @@ export const encryptApiKey = (plaintext: string): string => {
     
     return `${saltBase64}:${ivBase64}:${tagBase64}:${encrypted}`;
   } catch (error) {
-    console.error("Encryption error:", error);
-    throw new Error("Failed to encrypt API key");
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Encryption error:", errorMessage, error);
+    
+    // Provide more specific error messages
+    if (errorMessage.includes("Crypto module is not available")) {
+      throw new Error("Encryption is only available server-side. Please ensure this code runs in an API route.");
+    }
+    if (errorMessage.includes("API_KEY_ENCRYPTION_SECRET")) {
+      throw new Error("API_KEY_ENCRYPTION_SECRET environment variable is required");
+    }
+    
+    throw new Error(`Failed to encrypt API key: ${errorMessage}`);
   }
 };
 
@@ -84,6 +108,7 @@ export const decryptApiKey = (encryptedData: string): string => {
   }
 
   try {
+    ensureCryptoAvailable();
     const key = getEncryptionKey();
     
     // Split the encrypted data
@@ -112,8 +137,18 @@ export const decryptApiKey = (encryptedData: string): string => {
     
     return decrypted;
   } catch (error) {
-    console.error("Decryption error:", error);
-    throw new Error("Failed to decrypt API key - key may be corrupted or invalid");
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Decryption error:", errorMessage, error);
+    
+    // Provide more specific error messages
+    if (errorMessage.includes("Crypto module is not available")) {
+      throw new Error("Decryption is only available server-side. Please ensure this code runs in an API route.");
+    }
+    if (errorMessage.includes("API_KEY_ENCRYPTION_SECRET")) {
+      throw new Error("API_KEY_ENCRYPTION_SECRET environment variable is required");
+    }
+    
+    throw new Error(`Failed to decrypt API key - key may be corrupted or invalid: ${errorMessage}`);
   }
 };
 
