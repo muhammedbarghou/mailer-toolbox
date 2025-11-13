@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 import { sha256 } from "js-sha256";
-import { google } from "@ai-sdk/google";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateText } from "ai";
+import { createClient } from "@/lib/supabase/server";
+import { getUserApiKey } from "@/lib/api-keys";
 
 // System prompt for email rewriting
 const SYSTEM_PROMPT = `EXPERT EMAIL HTML REWRITER: COMPLETE SPAM FILTER BYPASS SYSTEM
@@ -375,13 +377,46 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Validate Google API key is configured
-    if (!GOOGLE_API_KEY) {
+    // Get API key: try user's key first, then fall back to environment variable
+    let apiKeyToUse: string | null = null;
+    
+    try {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        // Try to get user's API key
+        const userApiKey = await getUserApiKey(user.id, "gemini");
+        if (userApiKey) {
+          apiKeyToUse = userApiKey;
+        }
+      }
+    } catch (error) {
+      console.error("Error getting user API key:", error);
+      // Fall through to use environment variable
+    }
+
+    // Fall back to environment variable if no user key
+    if (!apiKeyToUse) {
+      apiKeyToUse = GOOGLE_API_KEY || null;
+    }
+
+    // Validate API key is available
+    if (!apiKeyToUse) {
       return NextResponse.json(
-        { error: "Google API key is not configured. Please set GOOGLE_GENERATIVE_AI_API_KEY in your environment variables." },
+        { 
+          error: "No API key configured. Please add your Gemini API key in Settings, or set GOOGLE_GENERATIVE_AI_API_KEY in environment variables." 
+        },
         { status: 500 }
       );
     }
+
+    // Create Google provider with the API key
+    const googleProvider = createGoogleGenerativeAI({
+      apiKey: apiKeyToUse,
+    });
 
     // Call Google Gemini API with retry logic for rate limits
     let result;
@@ -391,7 +426,7 @@ export async function POST(request: NextRequest) {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         result = await generateText({
-          model: google("gemini-2.5-flash"),
+          model: googleProvider("gemini-2.5-flash"),
           system: SYSTEM_PROMPT,
           prompt: html,
           temperature: 0.7,
@@ -405,11 +440,27 @@ export async function POST(request: NextRequest) {
         // Handle specific Google API errors that shouldn't be retried
         if (error?.statusCode === 401 || error?.status === 401) {
           return NextResponse.json(
-            { error: "Invalid Google API key. Please check your GOOGLE_GENERATIVE_AI_API_KEY environment variable." },
+            { error: "Invalid Google API key. Please check your API key in Settings or your GOOGLE_GENERATIVE_AI_API_KEY environment variable." },
             { status: 500 }
           );
         }
         
+        // Handle overloaded model errors (should retry)
+        if (error?.message?.includes("overloaded") || error?.message?.toLowerCase().includes("model is overloaded")) {
+          if (attempt < maxRetries) {
+            // Longer backoff for overloaded: 2s, 4s, 8s
+            const delayMs = Math.pow(2, attempt + 1) * 1000;
+            console.log(`Model overloaded. Retrying in ${delayMs}ms...`);
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            continue; // Retry
+          } else {
+            return NextResponse.json(
+              { error: "The Gemini model is currently overloaded. Please try again in a few moments." },
+              { status: 503 }
+            );
+          }
+        }
+
         // Handle quota/billing errors
         if (error?.statusCode === 429 || error?.status === 429 || error?.message?.includes("quota") || error?.message?.includes("billing")) {
           if (attempt < maxRetries) {
@@ -453,6 +504,12 @@ export async function POST(request: NextRequest) {
 
     // If we exhausted retries without success
     if (!result) {
+      if (lastError?.message?.includes("overloaded") || lastError?.message?.toLowerCase().includes("model is overloaded")) {
+        return NextResponse.json(
+          { error: "The Gemini model is currently overloaded. Please try again in a few moments." },
+          { status: 503 }
+        );
+      }
       if (lastError?.statusCode === 429 || lastError?.status === 429 || lastError?.message?.includes("quota")) {
         return NextResponse.json(
           { error: "Google API quota exceeded or rate limit reached. Please try again in a few moments." },

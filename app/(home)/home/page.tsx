@@ -95,7 +95,16 @@ const tools = [
     iconColor: "text-teal-500",
     borderColor: "border-teal-500/20",
   },
-  
+
+  {
+    href: "/subject-rewrite",
+    title: "AI Subject Line Rewriter",
+    description: "Transform spam-triggering subject lines into deliverable, high-performing alternatives. Get 20 optimized versions for each input subject line with AI-powered spam filter bypass technology.",
+    icon: Mail,
+    color: "from-pink-500/10 to-purple-500/10",
+    iconColor: "text-pink-500",
+    borderColor: "border-pink-500/20",
+  },
 ]
 
 export default function DashboardPage() {

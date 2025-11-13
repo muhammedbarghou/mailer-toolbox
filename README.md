@@ -5,6 +5,8 @@ A comprehensive suite of email and IP tools built with Next.js 16, designed to s
 ## Features
 
 - **AI Email Rewriter** - Transform HTML emails to bypass spam filters and improve deliverability
+- **Subject Line Rewriter** - Generate multiple optimized subject line alternatives
+- **User API Key Management** - Users can add their own Gemini API keys (encrypted and secure)
 - **Header Processor** - Process and analyze email headers
 - **HTML to Image Converter** - Convert HTML emails to images
 - **EML to TXT Converter** - Extract text content from EML files
@@ -47,7 +49,9 @@ GOOGLE_GENERATIVE_AI_API_KEY=your_google_api_key_here
 UPSTASH_REDIS_REST_URL=https://your-redis-instance.upstash.io
 UPSTASH_REDIS_REST_TOKEN=your_redis_token_here
 PROMPT_VERSION=v1.0
+API_KEY_ENCRYPTION_SECRET=your_encryption_secret_here
 ```
+**Important**: Generate a strong random string for `API_KEY_ENCRYPTION_SECRET` (at least 32 characters). This is used to encrypt user API keys in the database.
 
 5. Run the development server:
 ```bash
@@ -120,14 +124,57 @@ Response:
 - `html`: The rewritten HTML email
 - `cached`: Boolean indicating if the response came from cache
 
+## User API Key Management
+
+### Overview
+
+Users can now add their own Gemini API keys through the Settings page. This feature allows:
+- **Cost Control**: Users pay for their own API usage
+- **Better Rate Limits**: Each user has their own quota
+- **Privacy**: API calls use user's own keys
+- **Multiple Keys**: Support for multiple keys per provider (for future multi-AI model support)
+
+### How It Works
+
+1. **Encryption**: API keys are encrypted using AES-256-GCM before storage
+2. **Real-time Validation**: Keys are validated when added or updated
+3. **Priority System**: User keys take priority over environment variable
+4. **Fallback**: If no user key is set, the app falls back to `GOOGLE_GENERATIVE_AI_API_KEY`
+
+### Using User API Keys
+
+1. Navigate to **Settings** (`/settings`) from the sidebar or user menu
+2. Click **Add New API Key**
+3. Select provider (currently Gemini)
+4. Enter a name for your key
+5. Paste your Gemini API key
+6. Optionally set as default
+7. Click **Add API Key** - the key will be validated automatically
+
+### API Key Priority
+
+When making API calls, the system uses keys in this order:
+1. User's default API key (if authenticated and set)
+2. User's active API key (if authenticated, no default set)
+3. Environment variable `GOOGLE_GENERATIVE_AI_API_KEY` (fallback)
+4. Error if none available
+
+### Security
+
+- All API keys are encrypted at rest using AES-256-GCM
+- Keys are only decrypted server-side when needed
+- Row Level Security (RLS) ensures users can only access their own keys
+- Keys are never logged or exposed in error messages
+
 ### Environment Variables
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `GOOGLE_GENERATIVE_AI_API_KEY` | Your Google Generative AI API key | Yes |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | Your Google Generative AI API key (fallback if users don't provide their own) | Yes |
 | `UPSTASH_REDIS_REST_URL` | Upstash Redis REST URL | Yes |
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST token | Yes |
 | `PROMPT_VERSION` | Version identifier for cache invalidation | No (defaults to `v1.0`) |
+| `API_KEY_ENCRYPTION_SECRET` | Secret key for encrypting user API keys (min 32 chars, use strong random string) | Yes (for production) |
 
 ## Deployment
 
