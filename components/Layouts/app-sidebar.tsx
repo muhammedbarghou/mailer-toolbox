@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { FileText, Inbox, Network, ImageIcon, Sparkles, PanelsRightBottom, Scissors, Layers, Home, Mail } from "lucide-react"
+import { FileText, Inbox, Network, ImageIcon, Sparkles, PanelsRightBottom, Scissors, Layers, Home, Mail, Settings } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -142,6 +142,30 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
+
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === "/settings"}
+                  tooltip="Settings"
+                  className={`relative rounded-lg transition-all duration-200 ${
+                    pathname === "/settings"
+                      ? "bg-sidebar-primary/20 text-sidebar-primary"
+                      : "hover:bg-sidebar-accent/50 text-sidebar-foreground/80 hover:text-sidebar-foreground"
+                  }`}
+                >
+                  <Link href="/settings" className="flex items-center gap-2">
+                    <Settings className="h-4 w-4 shrink-0" />
+                    <span className="flex-1 text-sm">Settings</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
 
     </Sidebar>
