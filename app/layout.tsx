@@ -1,21 +1,17 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono, Bitcount_Grid_Single } from "next/font/google";
-import "./globals.css";
-import Navbar from "@/components/Layouts/nav-bar";
-import Footer from "@/components/footer";
+import type { Metadata } from "next"
+import { Geist } from "next/font/google"
+import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { Toaster } from 'sonner'
+import { Toaster } from "sonner"
 import CookieConsentBanner from "@/components/cookie-consent-banner"
 import { Analytics } from "@vercel/analytics/next"
 import { AuthProvider } from "@/contexts/AuthContext"
-import AuthenticatedLayout from "@/components/Layouts/AuthenticatedLayout"
-
+import { ErrorBoundary } from "@/components/ui/error-boundary"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
-});
-;
+})
 
 export const metadata: Metadata = {
   title: "Mailer toolbox",
@@ -23,7 +19,7 @@ export const metadata: Metadata = {
   icons: {
     icon: "/Logo.svg",
   },
-};
+}
 
 export default function RootLayout({
   children,
@@ -31,28 +27,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="light" style={{colorScheme:"light"}}>
-      <body suppressHydrationWarning>
+    <html lang="en" className="light" style={{ colorScheme: "light" }}>
+      <body suppressHydrationWarning className="m-0 p-0 overflow-x-hidden">
         <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-        <AuthProvider>
-          <Navbar />
-          <main className="grow overflow-auto">
-            <AuthenticatedLayout>
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <ErrorBoundary>
+            <AuthProvider>
               {children}
-            </AuthenticatedLayout>
-          </main>
-          <Footer />
-          <Toaster position="bottom-right" />
-          <CookieConsentBanner />
-          <Analytics />
-        </AuthProvider>
+              <Toaster position="bottom-right" />
+              <CookieConsentBanner />
+              <Analytics />
+            </AuthProvider>
+          </ErrorBoundary>
         </ThemeProvider>
       </body>
     </html>
-  );
+  )
 }

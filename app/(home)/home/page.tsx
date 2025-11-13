@@ -104,12 +104,12 @@ export default function DashboardPage() {
     <div className="container mx-auto max-w-7xl px-4 py-6 md:py-8 lg:py-12">
       {/* Welcome Header */}
       <div className="mb-8 md:mb-12">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Zap className="h-6 w-6 text-primary" />
+        <div className="flex items-center gap-4 mb-6">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/20 shadow-sm">
+            <Zap className="h-7 w-7 text-primary" />
           </div>
-          <div>
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight">
+          <div className="flex-1">
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
               Welcome back, {userName}!
             </h1>
             <p className="text-muted-foreground text-base md:text-lg mt-2">
@@ -121,39 +121,45 @@ export default function DashboardPage() {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-12">
-        <Card className="border-2 hover:border-primary/50 transition-colors">
+        <Card className="border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg group">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Available Tools</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+              <TrendingUp className="h-4 w-4 text-primary" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{tools.length}</div>
+            <div className="text-3xl font-bold mb-1">{tools.length}</div>
             <p className="text-xs text-muted-foreground">
               Professional email & IP tools
             </p>
           </CardContent>
         </Card>
 
-        <Card className="border-2 hover:border-primary/50 transition-colors">
+        <Card className="border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg group">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Batch Processing</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+              <Clock className="h-4 w-4 text-primary" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">Unlimited</div>
+            <div className="text-3xl font-bold mb-1">Unlimited</div>
             <p className="text-xs text-muted-foreground">
               Process multiple files at once
             </p>
           </CardContent>
         </Card>
 
-        <Card className="border-2 hover:border-primary/50 transition-colors">
+        <Card className="border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg group">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Status</CardTitle>
-            <Zap className="h-4 w-4 text-muted-foreground" />
+            <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+              <Zap className="h-4 w-4 text-primary" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">Active</div>
+            <div className="text-3xl font-bold mb-1">Active</div>
             <p className="text-xs text-muted-foreground">
               All systems operational
             </p>
@@ -163,7 +169,7 @@ export default function DashboardPage() {
 
       {/* Tools Grid */}
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-8">
           <div>
             <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-2">
               Your Tools
