@@ -360,7 +360,7 @@ export default function EmailSourceSeparator() {
   const [isProcessing, setIsProcessing] = useState(false)
 
   const maxSize = 10 * 1024 * 1024 // 10MB
-  const maxFiles = 20
+  const maxFiles = 100
 
   const [
     { files, isDragging, errors },
