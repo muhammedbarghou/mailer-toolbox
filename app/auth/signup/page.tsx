@@ -12,6 +12,8 @@ import Logo from "@/components/logo"
 import { Chrome } from "lucide-react"
 
 export default function SignupPage() {
+  const [name, setName] = useState("")
+  const [lastName, setLastName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
@@ -30,7 +32,8 @@ export default function SignupPage() {
     setLoading(true)
 
     try {
-      const { error } = await signUp(email, password)
+      const displayName = `${name.trim()} ${lastName.trim()}`.trim()
+      const { error } = await signUp(email, password, displayName)
       if (error) {
         toast.error(error.message || "Failed to sign up")
       } else {
@@ -99,6 +102,32 @@ export default function SignupPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name"> First Name</Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="John"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                disabled={loading}
+                autoComplete="name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="lastName">Last Name</Label>
+              <Input
+                id="lastName"
+                type="text"
+                placeholder="Doe"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                required
+                disabled={loading}
+                autoComplete="family-name"
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input

@@ -32,8 +32,13 @@ import {
   Sparkles,
   Shield,
   ExternalLink,
+  User,
+  Mail,
+  Lock,
+  Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 import type { ApiKeyProvider } from "@/lib/api-keys";
 
 interface ApiKey {
@@ -50,17 +55,36 @@ interface ApiKey {
 }
 
 export default function SettingsPage() {
+  const { user, updateProfile, updatePassword } = useAuth();
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [addingKey, setAddingKey] = useState(false);
   const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
   const [validatingKeyId, setValidatingKeyId] = useState<string | null>(null);
 
+  // Personal settings state
+  const [displayName, setDisplayName] = useState("");
+  const [isEditingDisplayName, setIsEditingDisplayName] = useState(false);
+  const [savingDisplayName, setSavingDisplayName] = useState(false);
+  
+  // Password change state
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+
   // Form state
   const [provider, setProvider] = useState<ApiKeyProvider>("gemini");
   const [keyName, setKeyName] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [setAsDefault, setSetAsDefault] = useState(false);
+
+  // Initialize display name from user metadata
+  useEffect(() => {
+    if (user?.user_metadata?.display_name) {
+      setDisplayName(user.user_metadata.display_name);
+    }
+  }, [user]);
 
   // Load API keys
   const loadApiKeys = async () => {
@@ -266,6 +290,64 @@ export default function SettingsPage() {
     );
   };
 
+  // Handle display name update
+  const handleUpdateDisplayName = async () => {
+    if (!displayName.trim()) {
+      toast.error("Display name cannot be empty");
+      return;
+    }
+
+    setSavingDisplayName(true);
+    try {
+      const { error } = await updateProfile(displayName);
+      if (error) {
+        toast.error(error.message || "Failed to update display name");
+      } else {
+        toast.success("Display name updated successfully");
+        setIsEditingDisplayName(false);
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update display name");
+    } finally {
+      setSavingDisplayName(false);
+    }
+  };
+
+  // Handle password change
+  const handleChangePassword = async () => {
+    if (!newPassword.trim()) {
+      toast.error("Please enter a new password");
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const { error } = await updatePassword(newPassword);
+      if (error) {
+        toast.error(error.message || "Failed to change password");
+      } else {
+        toast.success("Password changed successfully");
+        setNewPassword("");
+        setConfirmPassword("");
+        setShowPasswordForm(false);
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Failed to change password");
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   // Filter keys by provider
   const geminiKeys = apiKeys.filter((k) => k.provider === "gemini");
   const otherKeys = apiKeys.filter((k) => k.provider !== "gemini");
@@ -278,12 +360,211 @@ export default function SettingsPage() {
           <div className="p-2 rounded-lg bg-primary/10">
             <Key className="h-6 w-6 text-primary" />
           </div>
-          <h1 className="text-3xl md:text-4xl font-bold">API Keys Settings</h1>
+          <h1 className="text-3xl md:text-4xl font-bold">Settings</h1>
         </div>
         <p className="text-muted-foreground">
-          Manage your AI provider API keys. Your keys are encrypted and stored securely.
+          Manage your account settings, personal information, and API keys.
         </p>
       </div>
+
+      {/* Personal & Privacy Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <User className="h-5 w-5" />
+            Personal & Privacy Settings
+          </CardTitle>
+          <CardDescription>
+            Manage your personal information and account privacy settings.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Display Name */}
+          <div className="space-y-2">
+            <Label htmlFor="display-name">Display Name</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="display-name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                disabled={!isEditingDisplayName || savingDisplayName}
+                placeholder="Enter your display name"
+              />
+              {isEditingDisplayName ? (
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleUpdateDisplayName}
+                    disabled={savingDisplayName}
+                  >
+                    {savingDisplayName ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setIsEditingDisplayName(false);
+                      setDisplayName(user?.user_metadata?.display_name || "");
+                    }}
+                    disabled={savingDisplayName}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsEditingDisplayName(true)}
+                >
+                  <Edit2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              This name will be displayed throughout the application.
+            </p>
+          </div>
+
+          {/* Email (Read-only) */}
+          <div className="space-y-2">
+            <Label htmlFor="email">Email Address</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="email"
+                value={user?.email || ""}
+                disabled
+                className="bg-muted"
+              />
+              <Mail className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Your email address cannot be changed here. Contact support if you need to change it.
+            </p>
+          </div>
+
+          {/* Password Change */}
+          <div className="space-y-4 border-t pt-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label>Password</Label>
+                <p className="text-xs text-muted-foreground">
+                  Change your account password to keep your account secure.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPasswordForm(!showPasswordForm)}
+              >
+                {showPasswordForm ? (
+                  <>
+                    <X className="h-4 w-4 mr-2" />
+                    Cancel
+                  </>
+                ) : (
+                  <>
+                    <Lock className="h-4 w-4 mr-2" />
+                    Change Password
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {showPasswordForm && (
+              <div className="space-y-4 p-4 rounded-lg border bg-muted/50">
+                <div className="space-y-2">
+                  <Label htmlFor="new-password">New Password</Label>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter new password"
+                    minLength={6}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm New Password</Label>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    minLength={6}
+                  />
+                </div>
+                <Button
+                  onClick={handleChangePassword}
+                  disabled={changingPassword || !newPassword || !confirmPassword}
+                  className="w-full"
+                >
+                  {changingPassword ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Changing Password...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="mr-2 h-4 w-4" />
+                      Update Password
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Account Information */}
+          <div className="space-y-3 border-t pt-4">
+            <Label>Account Information</Label>
+            <div className="grid gap-3 text-sm">
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <User className="h-4 w-4" />
+                  <span>User ID</span>
+                </div>
+                <span className="font-mono text-xs">{user?.id || "N/A"}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Calendar className="h-4 w-4" />
+                  <span>Account Created</span>
+                </div>
+                <span>
+                  {user?.created_at
+                    ? new Date(user.created_at).toLocaleDateString()
+                    : "N/A"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Shield className="h-4 w-4" />
+                  <span>Email Verified</span>
+                </div>
+                <span>
+                  {user?.email_confirmed_at ? (
+                    <span className="text-green-600 dark:text-green-400 flex items-center gap-1">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Verified
+                    </span>
+                  ) : (
+                    <span className="text-yellow-600 dark:text-yellow-400 flex items-center gap-1">
+                      <AlertCircle className="h-4 w-4" />
+                      Not Verified
+                    </span>
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Add New Key Card */}
       <Card>

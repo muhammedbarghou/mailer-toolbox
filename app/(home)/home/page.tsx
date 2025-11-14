@@ -110,7 +110,7 @@ const tools = [
 export default function DashboardPage() {
   const { user } = useAuth()
 
-  const userName = user?.email?.split("@")[0] || "User"
+  const userName = user?.user_metadata?.display_name || "User"
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-6 md:py-8 lg:py-12">
