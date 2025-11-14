@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { Geist } from "next/font/google"
+import { Ubuntu } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "sonner"
@@ -8,9 +8,12 @@ import { Analytics } from "@vercel/analytics/next"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { ErrorBoundary } from "@/components/ui/error-boundary"
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+
+
+const ubuntu = Ubuntu({
+  variable: "--font-ubuntu",
   subsets: ["latin"],
+  weight: ["400", "500", "700"],
 })
 
 export const metadata: Metadata = {
@@ -27,8 +30,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="light" style={{ colorScheme: "light" }}>
-      <body suppressHydrationWarning className="m-0 p-0 overflow-x-hidden">
+    <html lang="en" className={`light ${ubuntu.variable}`} style={{ colorScheme: "light" }}>
+      <body suppressHydrationWarning className={`m-0 p-0 overflow-x-hidden ${ubuntu.className}`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
