@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { User, LogOut, Settings, Home } from "lucide-react"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 
 export default function AuthenticatedNavbar() {
@@ -36,6 +36,12 @@ export default function AuthenticatedNavbar() {
 
   const userName = user?.email?.split("@")[0] || "User"
 
+  // Get user avatar URL from metadata (OAuth providers like Google store it here)
+  const userAvatarUrl = 
+    user?.user_metadata?.avatar_url || 
+    user?.user_metadata?.picture || 
+    null
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
       <div className=" mx-auto flex h-16 items-center justify-between px-4 md:px-6">
@@ -54,6 +60,12 @@ export default function AuthenticatedNavbar() {
                 className="relative h-10 w-10 rounded-full cursor-pointer hover:bg-accent"
               >
                 <Avatar className="h-10 w-10">
+                  {userAvatarUrl && (
+                    <AvatarImage 
+                      src={userAvatarUrl} 
+                      alt={userName}
+                    />
+                  )}
                   <AvatarFallback className="bg-primary text-primary-foreground font-semibold">
                     {userInitials}
                   </AvatarFallback>

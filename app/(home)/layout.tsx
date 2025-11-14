@@ -2,6 +2,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
 import AuthenticatedNavbar from "@/components/Layouts/authenticated-nav-bar"
 import {  SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/Layouts/app-sidebar"
+import Banner from "@/components/banner"
 
 export default function HomeLayout({
   children,
@@ -11,8 +12,9 @@ export default function HomeLayout({
   return (
     <SidebarProvider>
       <AppSidebar />
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+      <div className="flex flex-1 flex-col  pt-0">
         <AuthenticatedNavbar />
+        <Banner />
         <ProtectedRoute>{children}</ProtectedRoute>
       </div>
     </SidebarProvider>
