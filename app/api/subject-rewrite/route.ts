@@ -15,23 +15,27 @@ const getSystemPrompt = () => {
   } catch (error) {
     console.error("Error reading subject.txt:", error);
     // Fallback prompt if file can't be read
-    return `You are an elite email marketing specialist with deep expertise in email deliverability, spam filter algorithms, and subject line optimization. Your mission is to analyze a list of email subject lines and rewrite each one to maximize inbox placement, open rates, and engagement while completely eliminating spam triggers.
+    return `You are an elite email marketing specialist with deep expertise in email deliverability, spam filter algorithms, and subject line optimization. Your mission is to analyze ONE email subject line and rewrite it to maximize inbox placement, open rates, and engagement while completely eliminating spam triggers.
 
-When I provide you with a list of subject lines, you will evaluate each one against established best practices and rewrite any problematic subjects into deliverable alternatives. You will maintain the core message and intent while transforming the vocabulary, structure, and formatting to bypass spam filters and appeal to human recipients.
+When I provide you with ONE subject line, you will evaluate it against established best practices and rewrite it into deliverable alternatives. You will maintain the core message and intent while transforming the vocabulary, structure, and formatting to bypass spam filters and appeal to human recipients.
 
-IMPORTANT: Generate exactly 20 rewritten subject lines for each input subject line. Format your response as a JSON array of objects, where each object has:
-- "original": the original subject line
-- "rewritten": an array of exactly 20 rewritten alternatives
+CRITICAL: You will receive ONE subject line at a time. For that ONE subject line, you MUST generate EXACTLY 20 (twenty) rewritten alternatives. Format your response as a JSON object (NOT an array) with:
+- "original": the original subject line exactly as provided
+- "rewritten": an array of EXACTLY 20 rewritten alternatives (no more, no less)
 - "changes": a brief explanation of what was corrected
 
 Example format:
-[
-  {
-    "original": "FREE SHIPPING TODAY!!!",
-    "rewritten": ["Complimentary delivery available", "Free shipping this week", ...20 total...],
-    "changes": "Removed all-caps, replaced FREE with complimentary, eliminated excessive punctuation"
-  }
-]`;
+{
+  "original": "FREE SHIPPING TODAY!!!",
+  "rewritten": [
+    "Complimentary delivery available",
+    "Free shipping this week",
+    ...exactly 20 total alternatives...
+  ],
+  "changes": "Removed all-caps, replaced FREE with complimentary, eliminated excessive punctuation"
+}
+
+Remember: You are processing ONE subject line and must return EXACTLY 20 alternatives for that single subject line.`;
   }
 };
 
@@ -41,7 +45,7 @@ const SYSTEM_PROMPT = getSystemPrompt();
 const PROMPT_VERSION = process.env.PROMPT_VERSION || "v1.0";
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-const GOOGLE_API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+// Note: We do NOT use GOOGLE_API_KEY from environment - we require users to provide their own API key
 
 // Rate limit configuration
 const RATE_LIMIT_MAX = 5; // 5 tries per hour
@@ -147,9 +151,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get API key: try user's key first, then fall back to environment variable
+    // Get API key: MUST use user's key if authenticated, never fall back to environment variable
     let apiKeyToUse: string | null = null;
-    let apiKeySource = "environment";
+    let apiKeySource = "user";
     
     try {
       const supabase = await createClient();
@@ -160,41 +164,53 @@ export async function POST(request: NextRequest) {
 
       if (authError) {
         console.error("Auth error:", authError);
+        return NextResponse.json(
+          { 
+            error: "Authentication required. Please log in to use this feature." 
+          },
+          { status: 401 }
+        );
       }
 
-      if (user) {
-        // Try to get user's API key
-        const userApiKey = await getUserApiKey(user.id, "gemini");
-        if (userApiKey) {
-          apiKeyToUse = userApiKey;
-          apiKeySource = "user";
-          console.log(`Using user API key for user ${user.id}`);
-        } else {
-          console.log(`No user API key found for user ${user.id}, falling back to environment variable`);
-        }
-      } else {
-        console.log("No authenticated user, using environment variable");
+      if (!user) {
+        return NextResponse.json(
+          { 
+            error: "Authentication required. Please log in to use this feature." 
+          },
+          { status: 401 }
+        );
       }
+
+      // MUST get user's API key - no fallback to environment variable
+      const userApiKey = await getUserApiKey(user.id, "gemini");
+      if (!userApiKey) {
+        return NextResponse.json(
+          { 
+            error: "No API key configured. Please add your Gemini API key in Settings to use this feature." 
+          },
+          { status: 400 }
+        );
+      }
+
+      apiKeyToUse = userApiKey;
+      console.log(`Using user API key for user ${user.id}`);
     } catch (error) {
       console.error("Error getting user API key:", error);
-      // Fall through to use environment variable
-    }
-
-    // Fall back to environment variable if no user key
-    if (!apiKeyToUse) {
-      apiKeyToUse = GOOGLE_API_KEY || null;
-      if (apiKeyToUse) {
-        console.log("Using environment variable API key");
-      }
+      return NextResponse.json(
+        { 
+          error: "Failed to retrieve your API key. Please check your Settings." 
+        },
+        { status: 500 }
+      );
     }
 
     // Validate API key is available
     if (!apiKeyToUse) {
       return NextResponse.json(
         { 
-          error: "No API key configured. Please add your Gemini API key in Settings, or set GOOGLE_GENERATIVE_AI_API_KEY in environment variables." 
+          error: "No API key configured. Please add your Gemini API key in Settings." 
         },
-        { status: 500 }
+        { status: 400 }
       );
     }
 
@@ -207,27 +223,50 @@ export async function POST(request: NextRequest) {
       const subjectNumber = i + 1;
       const totalSubjects = subjects.length;
       
-      const userPrompt = `You are rewriting subject line ${subjectNumber} of ${totalSubjects}.
+      const userPrompt = `You are rewriting ONE SINGLE subject line. This is subject ${subjectNumber} of ${totalSubjects} total subjects.
 
-CRITICAL REQUIREMENTS:
-- Generate EXACTLY 20 rewritten alternatives for this ONE subject line
-- Each alternative must be unique and optimized
-- Return ONLY a JSON object (not an array) with this exact structure:
+CRITICAL REQUIREMENTS - READ CAREFULLY:
+1. You are processing ONLY ONE subject line: "${subject.replace(/"/g, '\\"')}"
+2. You MUST generate EXACTLY 20 (twenty) rewritten alternatives for THIS ONE subject line
+3. Each alternative must be unique, optimized, and different from the others
+4. Return ONLY a JSON object (NOT an array) with this EXACT structure:
 
 {
   "original": "${subject.replace(/"/g, '\\"')}",
-  "rewritten": ["alternative 1", "alternative 2", "alternative 3", ... up to exactly 20 alternatives ...],
+  "rewritten": [
+    "alternative 1",
+    "alternative 2",
+    "alternative 3",
+    "alternative 4",
+    "alternative 5",
+    "alternative 6",
+    "alternative 7",
+    "alternative 8",
+    "alternative 9",
+    "alternative 10",
+    "alternative 11",
+    "alternative 12",
+    "alternative 13",
+    "alternative 14",
+    "alternative 15",
+    "alternative 16",
+    "alternative 17",
+    "alternative 18",
+    "alternative 19",
+    "alternative 20"
+  ],
   "changes": "brief explanation of what was corrected"
 }
 
 Subject line to rewrite:
-"${subject}"
+"${subject.replace(/"/g, '\\"')}"
 
-IMPORTANT: 
-- You must provide EXACTLY 20 alternatives in the "rewritten" array
-- Do NOT return an array of objects, return a SINGLE object
-- The "rewritten" array must contain exactly 20 strings
-- Each rewritten alternative should be optimized for deliverability and engagement`;
+MANDATORY REQUIREMENTS:
+- The "rewritten" array MUST contain EXACTLY 20 strings - no more, no less
+- Do NOT return an array of objects - return a SINGLE object
+- Each of the 20 alternatives must be a unique, optimized subject line
+- All 20 alternatives should be optimized for deliverability, engagement, and spam filter avoidance
+- Count your alternatives: you must provide exactly 20, not 19, not 21, but exactly 20`;
 
       // Create Google provider with the API key
       const googleProvider = createGoogleGenerativeAI({
@@ -365,10 +404,26 @@ IMPORTANT:
         );
       }
 
-      // Ensure we have exactly 20 alternatives (or at least validate we have some)
-      if (parsedResult.rewritten.length < 20) {
-        console.warn(`Subject ${subjectNumber} only returned ${parsedResult.rewritten.length} alternatives, expected 20`);
-        // We'll still accept it but log a warning
+      // CRITICAL: Ensure we have exactly 20 alternatives
+      if (parsedResult.rewritten.length !== 20) {
+        console.error(`Subject ${subjectNumber} returned ${parsedResult.rewritten.length} alternatives, expected exactly 20`);
+        return NextResponse.json(
+          { 
+            error: `Failed to generate exactly 20 alternatives for subject ${subjectNumber}. Received ${parsedResult.rewritten.length} alternatives instead. Please try again.` 
+          },
+          { status: 500 }
+        );
+      }
+
+      // Validate that all alternatives are non-empty strings
+      const invalidAlternatives = parsedResult.rewritten.filter((alt: any) => typeof alt !== "string" || alt.trim().length === 0);
+      if (invalidAlternatives.length > 0) {
+        return NextResponse.json(
+          { 
+            error: `Invalid alternatives found for subject ${subjectNumber}. All 20 alternatives must be non-empty strings.` 
+          },
+          { status: 500 }
+        );
       }
 
       results.push(parsedResult);
