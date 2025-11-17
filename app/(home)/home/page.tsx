@@ -1,6 +1,6 @@
 "use client"
 
-import { useAuth } from "@/contexts/AuthContext"
+
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -109,9 +109,6 @@ const tools = [
 ]
 
 export default function DashboardPage() {
-  const { user } = useAuth()
-
-  const userName = user?.user_metadata?.display_name || "User"
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-6 md:py-8 lg:py-12">
@@ -123,7 +120,7 @@ export default function DashboardPage() {
           </div>
           <div className="flex-1">
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight bg-linear-to-r from-foreground to-foreground/70 bg-clip-text">
-              Welcome back, {userName}!
+              Welcome back
             </h1>
             <p className="text-muted-foreground text-base md:text-lg mt-2">
               Your dashboard for all email and IP processing tools
