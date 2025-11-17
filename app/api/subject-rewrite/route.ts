@@ -149,19 +149,31 @@ export async function POST(request: NextRequest) {
 
     // Get API key: try user's key first, then fall back to environment variable
     let apiKeyToUse: string | null = null;
+    let apiKeySource = "environment";
     
     try {
       const supabase = await createClient();
       const {
         data: { user },
+        error: authError,
       } = await supabase.auth.getUser();
+
+      if (authError) {
+        console.error("Auth error:", authError);
+      }
 
       if (user) {
         // Try to get user's API key
         const userApiKey = await getUserApiKey(user.id, "gemini");
         if (userApiKey) {
           apiKeyToUse = userApiKey;
+          apiKeySource = "user";
+          console.log(`Using user API key for user ${user.id}`);
+        } else {
+          console.log(`No user API key found for user ${user.id}, falling back to environment variable`);
         }
+      } else {
+        console.log("No authenticated user, using environment variable");
       }
     } catch (error) {
       console.error("Error getting user API key:", error);
@@ -171,6 +183,9 @@ export async function POST(request: NextRequest) {
     // Fall back to environment variable if no user key
     if (!apiKeyToUse) {
       apiKeyToUse = GOOGLE_API_KEY || null;
+      if (apiKeyToUse) {
+        console.log("Using environment variable API key");
+      }
     }
 
     // Validate API key is available
@@ -184,161 +199,188 @@ export async function POST(request: NextRequest) {
     }
 
     // Prepare the prompt for the AI
-    const subjectsList = subjects.map((s: string, i: number) => `${i + 1}. ${s}`).join("\n");
-    const userPrompt = `Please rewrite the following ${subjects.length} subject line(s) according to the guidelines. Generate exactly 20 rewritten alternatives for each subject line.
+    // Process each subject individually to ensure we get 20 alternatives per subject
+    const results: any[] = [];
+    
+    for (let i = 0; i < subjects.length; i++) {
+      const subject = subjects[i];
+      const subjectNumber = i + 1;
+      const totalSubjects = subjects.length;
+      
+      const userPrompt = `You are rewriting subject line ${subjectNumber} of ${totalSubjects}.
 
-Subject lines to rewrite:
-${subjectsList}
+CRITICAL REQUIREMENTS:
+- Generate EXACTLY 20 rewritten alternatives for this ONE subject line
+- Each alternative must be unique and optimized
+- Return ONLY a JSON object (not an array) with this exact structure:
 
-IMPORTANT: Return your response as a valid JSON array. Each object in the array must have:
-- "original": the original subject line exactly as provided
-- "rewritten": an array of exactly 20 rewritten alternatives
-- "changes": a brief explanation of what was corrected
+{
+  "original": "${subject.replace(/"/g, '\\"')}",
+  "rewritten": ["alternative 1", "alternative 2", "alternative 3", ... up to exactly 20 alternatives ...],
+  "changes": "brief explanation of what was corrected"
+}
 
-Format:
-[
-  {
-    "original": "subject line 1",
-    "rewritten": ["alternative 1", "alternative 2", ...20 total...],
-    "changes": "explanation"
-  },
-  {
-    "original": "subject line 2",
-    "rewritten": ["alternative 1", "alternative 2", ...20 total...],
-    "changes": "explanation"
-  }
-]`;
+Subject line to rewrite:
+"${subject}"
 
-    // Create Google provider with the API key
-    const googleProvider = createGoogleGenerativeAI({
-      apiKey: apiKeyToUse,
-    });
+IMPORTANT: 
+- You must provide EXACTLY 20 alternatives in the "rewritten" array
+- Do NOT return an array of objects, return a SINGLE object
+- The "rewritten" array must contain exactly 20 strings
+- Each rewritten alternative should be optimized for deliverability and engagement`;
 
-    // Call Google Gemini API with retry logic
-    let result;
-    const maxRetries = 3;
-    let lastError: any = null;
+      // Create Google provider with the API key
+      const googleProvider = createGoogleGenerativeAI({
+        apiKey: apiKeyToUse!,
+      });
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        result = await generateText({
-          model: googleProvider("gemini-2.5-flash"),
-          system: SYSTEM_PROMPT,
-          prompt: userPrompt,
-          temperature: 0.7,
-        });
-        break;
-      } catch (error: any) {
-        lastError = error;
-        console.error(`Google Gemini API error (attempt ${attempt + 1}/${maxRetries + 1}):`, error);
-        
-        if (error?.statusCode === 401 || error?.status === 401) {
+      // Call Google Gemini API with retry logic
+      let result;
+      const maxRetries = 3;
+      let lastError: any = null;
+
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          result = await generateText({
+            model: googleProvider("gemini-2.5-flash"),
+            system: SYSTEM_PROMPT,
+            prompt: userPrompt,
+            temperature: 0.7,
+          });
+          break;
+        } catch (error: any) {
+          lastError = error;
+          console.error(`Google Gemini API error for subject ${subjectNumber} (attempt ${attempt + 1}/${maxRetries + 1}):`, error);
+          
+          if (error?.statusCode === 401 || error?.status === 401) {
+            return NextResponse.json(
+              { error: `Invalid Google API key (source: ${apiKeySource}). Please check your API key in Settings or your GOOGLE_GENERATIVE_AI_API_KEY environment variable.` },
+              { status: 500 }
+            );
+          }
+          
+          // Handle overloaded model errors (should retry)
+          if (error?.message?.includes("overloaded") || error?.message?.toLowerCase().includes("model is overloaded")) {
+            if (attempt < maxRetries) {
+              // Longer backoff for overloaded: 2s, 4s, 8s
+              const delayMs = Math.pow(2, attempt + 1) * 1000;
+              console.log(`Model overloaded. Retrying in ${delayMs}ms...`);
+              await new Promise((resolve) => setTimeout(resolve, delayMs));
+              continue;
+            } else {
+              return NextResponse.json(
+                { error: "The Gemini model is currently overloaded. Please try again in a few moments." },
+                { status: 503 }
+              );
+            }
+          }
+
+          if (error?.statusCode === 429 || error?.status === 429 || error?.message?.includes("quota") || error?.message?.includes("billing")) {
+            if (attempt < maxRetries) {
+              const delayMs = Math.pow(2, attempt) * 1000;
+              console.log(`Rate limit/quota error. Retrying in ${delayMs}ms...`);
+              await new Promise((resolve) => setTimeout(resolve, delayMs));
+              continue;
+            } else {
+              return NextResponse.json(
+                { error: `Google API quota exceeded or rate limit reached (using ${apiKeySource} API key). Please check your billing and try again later.` },
+                { status: 500 }
+              );
+            }
+          }
+          
+          if (error?.statusCode === 500 || error?.statusCode === 503 || error?.status === 500 || error?.status === 503) {
+            if (attempt < maxRetries) {
+              const delayMs = Math.pow(2, attempt) * 1000;
+              console.log(`Server error. Retrying in ${delayMs}ms...`);
+              await new Promise((resolve) => setTimeout(resolve, delayMs));
+              continue;
+            } else {
+              return NextResponse.json(
+                { error: "Google API is temporarily unavailable. Please try again later." },
+                { status: 500 }
+              );
+            }
+          }
+
+          const errorMessage = error?.message || "Google Gemini API request failed";
           return NextResponse.json(
-            { error: "Invalid Google API key. Please check your API key in Settings or your GOOGLE_GENERATIVE_AI_API_KEY environment variable." },
+            { error: `Google Gemini API error: ${errorMessage}` },
             { status: 500 }
           );
         }
-        
-        // Handle overloaded model errors (should retry)
-        if (error?.message?.includes("overloaded") || error?.message?.toLowerCase().includes("model is overloaded")) {
-          if (attempt < maxRetries) {
-            // Longer backoff for overloaded: 2s, 4s, 8s
-            const delayMs = Math.pow(2, attempt + 1) * 1000;
-            console.log(`Model overloaded. Retrying in ${delayMs}ms...`);
-            await new Promise((resolve) => setTimeout(resolve, delayMs));
-            continue;
-          } else {
-            return NextResponse.json(
-              { error: "The Gemini model is currently overloaded. Please try again in a few moments." },
-              { status: 503 }
-            );
-          }
-        }
+      }
 
-        if (error?.statusCode === 429 || error?.status === 429 || error?.message?.includes("quota") || error?.message?.includes("billing")) {
-          if (attempt < maxRetries) {
-            const delayMs = Math.pow(2, attempt) * 1000;
-            console.log(`Rate limit/quota error. Retrying in ${delayMs}ms...`);
-            await new Promise((resolve) => setTimeout(resolve, delayMs));
-            continue;
-          } else {
-            return NextResponse.json(
-              { error: "Google API quota exceeded or rate limit reached. Please check your billing and try again later." },
-              { status: 500 }
-            );
-          }
+      if (!result) {
+        if (lastError?.message?.includes("overloaded") || lastError?.message?.toLowerCase().includes("model is overloaded")) {
+          return NextResponse.json(
+            { error: "The Gemini model is currently overloaded. Please try again in a few moments." },
+            { status: 503 }
+          );
         }
-        
-        if (error?.statusCode === 500 || error?.statusCode === 503 || error?.status === 500 || error?.status === 503) {
-          if (attempt < maxRetries) {
-            const delayMs = Math.pow(2, attempt) * 1000;
-            console.log(`Server error. Retrying in ${delayMs}ms...`);
-            await new Promise((resolve) => setTimeout(resolve, delayMs));
-            continue;
-          } else {
-            return NextResponse.json(
-              { error: "Google API is temporarily unavailable. Please try again later." },
-              { status: 500 }
-            );
-          }
+        if (lastError?.statusCode === 429 || lastError?.status === 429 || lastError?.message?.includes("quota")) {
+          return NextResponse.json(
+            { error: `Google API quota exceeded or rate limit reached (using ${apiKeySource} API key). Please try again in a few moments.` },
+            { status: 500 }
+          );
         }
-
-        const errorMessage = error?.message || "Google Gemini API request failed";
         return NextResponse.json(
-          { error: `Google Gemini API error: ${errorMessage}` },
+          { error: "Failed to connect to Google Gemini API after multiple attempts. Please try again later." },
           { status: 500 }
         );
       }
-    }
 
-    if (!result) {
-      if (lastError?.message?.includes("overloaded") || lastError?.message?.toLowerCase().includes("model is overloaded")) {
+      // Parse the AI response for this subject
+      let parsedResult;
+      try {
+        // Try to extract JSON from the response (in case there's extra text)
+        const text = result.text.trim();
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          parsedResult = JSON.parse(jsonMatch[0]);
+        } else {
+          parsedResult = JSON.parse(text);
+        }
+      } catch (parseError) {
+        console.error(`Failed to parse AI response for subject ${subjectNumber}:`, result.text);
         return NextResponse.json(
-          { error: "The Gemini model is currently overloaded. Please try again in a few moments." },
-          { status: 503 }
-        );
-      }
-      if (lastError?.statusCode === 429 || lastError?.status === 429 || lastError?.message?.includes("quota")) {
-        return NextResponse.json(
-          { error: "Google API quota exceeded or rate limit reached. Please try again in a few moments." },
+          { error: `Failed to parse AI response for subject ${subjectNumber}. The model may not have returned valid JSON.` },
           { status: 500 }
         );
       }
-      return NextResponse.json(
-        { error: "Failed to connect to Google Gemini API after multiple attempts. Please try again later." },
-        { status: 500 }
-      );
-    }
 
-    // Parse the AI response
-    let parsedResult;
-    try {
-      // Try to extract JSON from the response (in case there's extra text)
-      const text = result.text.trim();
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        parsedResult = JSON.parse(jsonMatch[0]);
-      } else {
-        parsedResult = JSON.parse(text);
+      // Validate the parsed result
+      if (!parsedResult || typeof parsedResult !== "object") {
+        return NextResponse.json(
+          { error: `Invalid response format for subject ${subjectNumber}. Expected an object.` },
+          { status: 500 }
+        );
       }
-    } catch (parseError) {
-      console.error("Failed to parse AI response:", result.text);
-      return NextResponse.json(
-        { error: "Failed to parse AI response. The model may not have returned valid JSON." },
-        { status: 500 }
-      );
-    }
 
-    // Validate the parsed result
-    if (!Array.isArray(parsedResult)) {
-      return NextResponse.json(
-        { error: "Invalid response format. Expected an array of results." },
-        { status: 500 }
-      );
+      // Ensure we have the required fields
+      if (!parsedResult.original || !Array.isArray(parsedResult.rewritten)) {
+        return NextResponse.json(
+          { error: `Invalid response structure for subject ${subjectNumber}. Missing 'original' or 'rewritten' fields.` },
+          { status: 500 }
+        );
+      }
+
+      // Ensure we have exactly 20 alternatives (or at least validate we have some)
+      if (parsedResult.rewritten.length < 20) {
+        console.warn(`Subject ${subjectNumber} only returned ${parsedResult.rewritten.length} alternatives, expected 20`);
+        // We'll still accept it but log a warning
+      }
+
+      results.push(parsedResult);
+      
+      // Add a small delay between requests to avoid rate limiting
+      if (i < subjects.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
     }
 
     return NextResponse.json({
-      results: parsedResult,
+      results: results,
       rateLimit: {
         remaining: rateLimit.remaining,
         resetAt: rateLimit.resetAt,
