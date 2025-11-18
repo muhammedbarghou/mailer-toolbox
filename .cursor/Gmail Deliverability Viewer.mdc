@@ -1,0 +1,363 @@
+---
+alwaysApply: true
+---
+
+
+
+
+---
+
+## 1. Overview
+
+**What it is:**
+A read-only Gmail metadata viewer designed to help marketing and deliverability teams verify where sent emails land (Primary / Promotions / Spam / Social), inspect email headers for sending IPs and sending domains, and search messages by subject/from — without storing full email bodies.
+
+**Primary goals:**
+
+* Provide on-demand, metadata-only mailbox search and inspection.
+* Preserve privacy: no email body storage and minimal header exposure.
+* Enable secure sharing: inbox owners grant viewing rights to specific colleagues.
+* Operate within Google API best practices to avoid excessive verification burden.
+
+**Ideal users:** marketing ops, deliverability engineers, QA testers, and teammates who need visibility into placement and header-level routing info.
+
+---
+
+## 2. High-level functional requirements
+
+1. Connect Gmail inbox via OAuth2 (read-only metadata scopes).
+2. Store encrypted OAuth tokens and inbox metadata in Supabase.
+3. Allow inbox owners to add/remove viewer permissions.
+4. Allow permitted viewers to run live searches (subject/from/filter by label).
+5. Return only metadata: From, Subject, Snippet (preview), Labels, Date, Sending IP, Sending Domain.
+6. Never expose full message bodies or unnecessary headers.
+7. Provide a compact UI showing results as cards (subject, from, snippet, label, IP, domain, timestamp).
+8. Respect rate-limits and refresh tokens safely.
+
+---
+
+## 3. Roles and capabilities (for the AI agent to reference)
+
+* **Inbox Owner**
+
+  * Connects Gmail account via OAuth.
+  * Grants/revokes view permissions to other app users.
+  * Can disconnect Gmail account (revokes token storage).
+
+* **Viewer (colleague)**
+
+  * Logs into the app (Supabase auth) and sees only inboxes shared with them.
+  * Can search by subject/from and filter by label (Primary/Promotions/Spam/Social).
+  * Can view limited header-derived information (sending IP, sending domain) and snippet.
+
+* **Admin (app owner)**
+
+  * Oversees usage, quotas, logs, error reports, and can intervene for support.
+
+---
+
+## 4. Primary user workflows (narrative flows)
+
+### A. Connect inbox (Inbox Owner)
+
+1. Owner clicks **Connect Gmail** in dashboard.
+2. App creates Google OAuth authorization URL and redirects user to consent.
+3. User consents (read-only Gmail scope). Google redirects back to `/api/gmail/callback`.
+4. Backend exchanges code for access & refresh tokens and stores them encrypted into `gmail_accounts` on Supabase.
+5. Inbox appears in owner dashboard; owner can manage permissions.
+
+### B. Share inbox with colleagues
+
+1. Owner opens inbox permissions panel.
+2. Owner selects teammates to grant view access (adds rows to `gmail_account_permissions`).
+3. Supabase RLS ensures only authorized viewers will be able to query inbox metadata.
+
+### C. Viewer searches inbox
+
+1. Viewer selects a shared inbox and enters a search query (subject/from) or uses label filters.
+2. Frontend requests `/api/gmail/search?accountId=...&query=...&label=...`.
+3. Backend fetches messages via Gmail API using the stored token (metadata-only request), extracts required fields, and returns compact result set.
+4. Frontend renders results as cards; viewer can expand details to see the header-derived IP/domain and snippet.
+
+---
+
+## 5. Data model (conceptual)
+
+> These are the tables the app will use in Supabase. Field types are abstract — use your DB/ORM types.
+
+### Table: `users` (existing — Supabase Auth)
+
+* `id` (uuid) — primary key (auth.uid)
+* `email` (text)
+* `name` (text)
+* ...other profile fields
+
+### Table: `gmail_accounts`
+
+* `id` (uuid) PK
+* `user_id` (uuid) → owner (references `users.id`)
+* `email` (text) — Gmail address
+* `access_token` (text) — encrypted
+* `refresh_token` (text) — encrypted
+* `token_expires_at` (timestamptz)
+* `created_at` (timestamptz)
+* `updated_at` (timestamptz)
+
+### Table: `gmail_account_permissions`
+
+* `id` (uuid) PK
+* `gmail_account_id` (uuid) → references `gmail_accounts.id`
+* `viewer_user_id` (uuid) → references `users.id`
+* `created_at` (timestamptz)
+
+> Note: You may add an audit/log table for permission changes and token events.
+
+---
+
+## 6. Supabase Row-Level Security (RLS) guidance
+
+**Principles:**
+
+* Only the inbox owner may mutate `gmail_accounts` rows they own.
+* Viewers may read `gmail_accounts` only if there is a permission row for them.
+* Only application server (service role or secure backend) may read tokens; frontend should never receive tokens.
+
+**Representative policy examples (pseudocode):**
+
+* `gmail_accounts` SELECT policy (allow viewer to select basic inbox metadata):
+
+  * Condition: `EXISTS (SELECT 1 FROM gmail_account_permissions p WHERE p.gmail_account_id = gmail_accounts.id AND p.viewer_user_id = auth.uid()) OR gmail_accounts.user_id = auth.uid()`
+
+* `gmail_accounts` UPDATE/DELETE (owner only):
+
+  * Condition: `gmail_accounts.user_id = auth.uid()`
+
+* `gmail_account_permissions` INSERT (only owner can share):
+
+  * Condition: `EXISTS (SELECT 1 FROM gmail_accounts a WHERE a.id = new.gmail_account_id AND a.user_id = auth.uid())`
+
+---
+
+## 7. API surface (high-level responsibilities)
+
+> All server-side routes are implemented as Next.js API routes (or app route handlers). They must authenticate via Supabase session/cookies and run on server.
+
+### `GET /api/gmail/auth-url`
+
+* Purpose: generate Google OAuth2 authorization URL for the current user.
+* Input: redirect target state (optional)
+* Output: URL to open in browser.
+* Security: must be authenticated.
+
+### `GET /api/gmail/callback` (OAuth callback)
+
+* Purpose: handle Google redirect, exchange code for tokens, store tokens in `gmail_accounts`.
+* Tasks:
+
+  * Exchange `code` for `access_token` + `refresh_token`.
+  * Set `token_expires_at` based on token lifetime.
+  * Save encrypted tokens in Supabase and associate with `auth.uid()`.
+* Security: validate `state` to prevent CSRF.
+
+### `POST /api/gmail/search`
+
+* Purpose: run a live Gmail search (subject/from/label filters) for a given `gmail_account_id` on behalf of the viewer.
+* Input: `accountId`, `query`, `label`, `maxResults`, pagination token (optional).
+* Behavior:
+
+  * Authenticate viewer; verify permission via DB.
+  * Use stored token (refresh if expired) to call Gmail API `messages.list` with `q` param.
+  * For each returned message ID, call `messages.get` with `format=metadata` and `metadataHeaders` for the minimal set (From, Subject, Received, Return-Path, Authentication-Results).
+  * Extract the snippet from the `messages.list` or `messages.get` response.
+  * Parse first `Received` header to extract sending IP; parse DKIM/Return-Path to determine sending domain.
+  * Return a compact JSON list of results with only permitted fields.
+* Output: `[{ id, subject, from, snippet, labels, date, sendingIp, sendingDomain }]`
+* Security: never return message body; never return raw headers beyond the small parsed fields.
+
+### `POST /api/gmail/refresh` (internal or cron)
+
+* Purpose: proactively refresh tokens that are near expiry.
+* Behavior: server-side process uses refresh tokens to get new access tokens and updates `token_expires_at`.
+* Note: also refresh lazily on-demand during `/search` if a token is expired.
+
+### `POST /api/gmail/disconnect`
+
+* Purpose: revoke stored tokens and clear the `gmail_accounts` row (or zero-out tokens) per owner request.
+* Behavior: revoke token via Google token revoke endpoint, remove data from DB.
+
+---
+
+## 8. Gmail API usage & exact fields to request
+
+**Use these Gmail API patterns:**
+
+* `messages.list(userId='me', q='subject:... from:... label:...')` to search.
+* `messages.get(userId='me', id=messageId, format='metadata', metadataHeaders=[...])` to retrieve only necessary headers.
+
+**Recommended `metadataHeaders` to request:**
+
+* `From`
+* `Subject`
+* `Received` (to extract IP) — but request sparingly
+* `Return-Path` (to find bounce domain)
+* `DKIM-Signature` (to extract `d=` domain if needed)
+* `Authentication-Results` (for SPF/DKIM/ARC verdicts)
+
+**Fields returned to client (strict):**
+
+* `id` (message id)
+* `subject`
+* `from`
+* `snippet` (first ~100 chars — Gmail provides)
+* `labels` (PRIMARY, SPAM, PROMOTIONS, SOCIAL, etc.)
+* `internalDate` (timestamp)
+* `sendingIp` (parsed from first Received header)
+* `sendingDomain` (parsed from DKIM d= or Return-Path or From as fallback)
+
+**Parsing rules (server-side):**
+
+* Prefer the earliest `Received` header that appears to come from an external MTA (skip obvious internal hops like `google.com` or known relay hosts if you have a whitelist).
+* Extract an IPv4/IPv6 literal using regex.
+* For `sendingDomain` prefer DKIM `d=` if present (most reliable), else `Return-Path`, else the domain in `From`.
+
+---
+
+## 9. Security, privacy, and compliance guidance (for the AI agent to explain to users)
+
+**Key talking points for users:**
+
+* We only request minimal Gmail metadata and never store full message bodies.
+* Only inbox owners can share access; tokens are stored encrypted and never exposed to viewers.
+* Viewers see only `From`, `Subject`, small snippet, labels, sending IP, and sending domain.
+* You can revoke access at any time from the app or via your Google account security settings.
+
+**Technical controls:**
+
+* Server-only access to tokens (use Supabase service role or server process). Frontend never receives tokens.
+* Encrypt tokens at rest in Supabase (application-level encryption or DB encryption). Use environment-managed secrets for encryption.
+* Limit headers requested to minimize privacy exposure.
+* Use RLS policies to prevent unauthorized DB access.
+
+**Google verification note (concise):**
+
+* Requesting `gmail.readonly` (metadata) is a restricted scope that may require verification; but by strictly limiting data access and not storing bodies, you reduce the chance of an extensive security audit.
+* Keep your app verification materials ready: privacy policy, app domain verification, demonstration video, and clear justification of why you need each scope.
+
+---
+
+## 10. Rate limits, quotas, and stability
+
+**Practical guidance:**
+
+* Gmail enforces per-user and per-project quotas. Avoid making large bursts of `messages.get` calls.
+* Use `messages.list` to narrow down IDs and limit `maxResults` (e.g., 25 per page).
+* Batch or throttle `messages.get` calls using a rate-limiter (e.g., Bottleneck) so you don’t exceed per-second-per-user limits.
+* Implement server-side caching for short-lived query results (e.g., cache responses for 30–60s) to reduce repeated identical calls from multiple viewers.
+* Implement exponential backoff for 429 and 5xx responses.
+
+---
+
+## 11. UI / UX guidance (for the AI agent to explain or recommend)
+
+**Search page**
+
+* Top: inbox selector + search bar (support `subject:` and `from:` quick syntax).
+* Filters: label selectors (Primary / Promotions / Spam / Social / All) and time range.
+* Results: paginated cards (compact view) with:
+
+  * `From` (with avatar if available)
+  * `Subject` (highlight matching terms)
+  * `Snippet` (first two lines)
+  * `Label` badge (color-coded)
+  * `Timestamp`
+  * `Sending IP` and `Sending Domain` (muted small text)
+* Expand: a modal showing parsed header details (IP chain summary, DKIM d=, Return-Path) — no raw header dump.
+
+**Permissions page**
+
+* List of inboxes the owner controls.
+* Simple add/remove controls for granting viewer access (autocomplete of teammates by email).
+* Audit log of share/unshare events (timestamp + user).
+
+---
+
+## 12. Error handling & support (what the AI agent should say)
+
+**Common issues & responses the AI agent can use:**
+
+* *"I can’t connect my Gmail account"* → Check that you used the correct Google account and accepted the consent screen. Ensure popups are enabled and that the app’s OAuth client ID is correctly configured.
+* *"Search returned no results"* → Verify the exact subject/from text; expand time range; confirm the inbox actually received such emails. Also check label filter (Spam/Promotions).
+* *"I don’t see the inbox someone shared with me"* → Confirm the owner added your correct app account email; have them double-check permissions; sign out and sign back in.
+* *"I don’t see sending IP or domain"* → Not all messages expose an external Received header (internal forwarding or provider-specific hiding). The app extracts the earliest external hop; if none are found, the field will be empty.
+* *"Why isn’t the snippet accurate?"* → Gmail provides `snippet` which is a short overview; it is not a full-body preview.
+
+---
+
+## 13. Logging, telemetry, and observability
+
+* Log events (audit): connect/disconnect inbox, share/unshare events, token refresh, Gmail API 4xx/5xx errors.
+* Track metrics: `search_requests`, `avg_search_latency`, `token_refreshes`, `api_rate_limited`.
+* Set alerts for repeated 401/403 (token issues) and repeated 429 (quota throttling).
+* Mask PII in logs (strip full email bodies and sensitive headers from logs).
+
+---
+
+## 14. Operational checklist for launch
+
+1. Create Google Cloud project & OAuth consent screen; set authorized redirect URIs.
+2. Implement and test OAuth flow in staging (limited accounts).
+3. Create Supabase tables and RLS policies; test permission flows.
+4. Implement server-side token encryption and secure vault for secrets (env vars).
+5. Implement rate-limiting and caching.
+6. Create a minimal UI and perform manual deliverability tests.
+7. Prepare privacy policy and user-facing documentation about what data is accessed.
+8. Submit for Google verification if requested; prepare a demo video and privacy justification.
+
+---
+
+## 15. FAQs for the AI agent (quick replies)
+
+* **Q: Do you store email bodies?**
+
+  * A: No — we only fetch and show limited metadata (From, Subject, Snippet, Labels, IP, Domain).
+
+* **Q: Can I revoke access?**
+
+  * A: Yes — the inbox owner can revoke sharing in our app or remove the OAuth connection via Google security settings.
+
+* **Q: Will Google perform a security audit?**
+
+  * A: Possibly if you request broad scopes or store message bodies. By limiting to metadata-only requests you minimize the likelihood of a costly audit.
+
+* **Q: Can a viewer forward or download a message?**
+
+  * A: No — viewers do not get message bodies or attachments and do not receive Gmail credentials.
+
+---
+
+## 16. Sample conversational prompts for the agent
+
+* *If user asks how to connect:* "Click **Connect Gmail**, choose the account, and approve read-only access. I’ll only ever retrieve metadata needed to check placement and headers."
+* *If user asks about privacy:* "We do not store email bodies. Tokens are stored securely in Supabase and viewers see only the fields the owner chose to share."
+* *If user reports a missing IP:* "Sometimes providers hide internal hops; I’ll try parsing the earliest external Received header. If unavailable, the sending IP may not be visible."
+
+---
+
+## 17. Future features (roadmap ideas)
+
+* IP reputation lookup and ESP identification (SendGrid, SES, Mailgun, Brevo, Postmark).
+* Visual placement analytics over time per domain or campaign.
+* Automated alerts for sudden increases in spam placement.
+* Optional header validation assistant (SPF/DKIM/DMARC parsing and human-friendly verdicts).
+* Allow optional ephemeral raw header fetch (with explicit owner consent & stricter access controls) for deep forensics.
+
+---
+
+## 18. Closing notes for the AI agent
+
+This MDC is intended to be the single source-of-truth explanation the agent uses when interacting with users about the Gmail Deliverability Viewer feature. It balances technical precision with privacy-first recommendations. Use the "FAQs" and "Sample conversational prompts" sections for short, user-facing answers; refer to architecture, data model, and operational checklist when users or internal teams ask for implementation details.
+
+---
+
+*Document version: 1.0 — generated for Next.js + Supabase integration*
+

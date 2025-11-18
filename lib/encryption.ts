@@ -152,3 +152,19 @@ export const decryptApiKey = (encryptedData: string): string => {
   }
 };
 
+/**
+ * Encrypts a Gmail OAuth token using AES-256-GCM
+ * Alias for encryptApiKey - reuses the same encryption function
+ * @param plaintext - The OAuth token to encrypt
+ * @returns Encrypted string in format: salt:iv:tag:encryptedData (all base64)
+ */
+export const encryptGmailToken = encryptApiKey;
+
+/**
+ * Decrypts a Gmail OAuth token using AES-256-GCM
+ * Alias for decryptApiKey - reuses the same decryption function
+ * @param encryptedData - The encrypted string in format: salt:iv:tag:encryptedData
+ * @returns Decrypted OAuth token
+ */
+export const decryptGmailToken = decryptApiKey;
+
