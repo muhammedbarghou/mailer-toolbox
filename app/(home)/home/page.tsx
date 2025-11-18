@@ -135,7 +135,7 @@ export default function DashboardPage() {
       </div>
 
             {/* Gmail Deliverability Viewer Guide Banner */}
-            <Card className="relative overflow-hidden border-2 border-blue-500/30 bg-linear-to-br from-blue-500/10 via-blue-500/5 to-blue-500/10 mb-8 md:mb-12 group hover:shadow-xl hover:border-blue-500/50 transition-all duration-300">
+      <Card className="relative overflow-hidden border-2 border-blue-500/30 bg-linear-to-br from-blue-500/10 via-blue-500/5 to-blue-500/10 mb-8 md:mb-12 group hover:shadow-xl hover:border-blue-500/50 transition-all duration-300">
         <div className="absolute inset-0 bg-linear-to-r from-blue-500/5 via-transparent to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
         <CardContent className="relative z-10 p-6 md:p-8">
