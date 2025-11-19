@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { GmailAccountManager } from "@/components/gmail/GmailAccountManager";
 import { GmailSearch } from "@/components/gmail/GmailSearch";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Tabs,
   TabsContent,
@@ -16,7 +17,8 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert";
-import { Mail, Search, AlertCircle, CheckCircle2, Clock, Shield } from "lucide-react";
+import { Mail, Search, AlertCircle, CheckCircle2, Clock, Shield, Lock } from "lucide-react";
+import { hasGmailDeliverabilityAccess } from "@/lib/gmail/access-control";
 
 interface GmailAccount {
   id: string;
@@ -29,18 +31,22 @@ const GMAIL_TOOL_ENABLED = process.env.NEXT_PUBLIC_GMAIL_TOOL_ENABLED === "False
 
 export default function GmailDeliverabilityPage() {
   const searchParams = useSearchParams();
+  const { user, loading: authLoading } = useAuth();
   const [ownedAccounts, setOwnedAccounts] = useState<GmailAccount[]>([]);
   const [sharedAccounts, setSharedAccounts] = useState<GmailAccount[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Check if user has access
+  const hasAccess = hasGmailDeliverabilityAccess(user?.email);
+
   useEffect(() => {
-    if (GMAIL_TOOL_ENABLED) {
+    if (GMAIL_TOOL_ENABLED && hasAccess) {
       loadAccounts();
       checkQueryParams();
     } else {
       setLoading(false);
     }
-  }, []);
+  }, [hasAccess]);
 
   const checkQueryParams = () => {
     const success = searchParams.get("success");
@@ -85,6 +91,71 @@ export default function GmailDeliverabilityPage() {
       setLoading(false);
     }
   };
+
+  // Show loading state while checking authentication
+  if (authLoading) {
+    return (
+      <div className="container mx-auto max-w-7xl px-4 py-6 md:py-12">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+              <Search className="h-6 w-6 animate-pulse text-muted-foreground" />
+            </div>
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show access denied message if user doesn't have access
+  if (!hasAccess) {
+    return (
+      <div className="container mx-auto max-w-7xl px-4 py-6 md:py-12">
+        <div className="mb-8 space-y-2">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+              <Lock className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">
+                Gmail Deliverability Viewer
+              </h1>
+              <p className="text-muted-foreground">
+                Analyze email placement, headers, and deliverability metrics
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <Alert className="mb-8 border-red-500/50 bg-red-500/10">
+          <Lock className="h-5 w-5 text-red-600 dark:text-red-400" />
+          <AlertTitle className="text-red-900 dark:text-red-100">
+            Access Restricted
+          </AlertTitle>
+          <AlertDescription className="mt-2 text-red-800 dark:text-red-200">
+            <p>
+              This tool is currently restricted to authorized users only. 
+              If you believe you should have access, please contact support.
+            </p>
+          </AlertDescription>
+        </Alert>
+
+        <div className="rounded-lg border-2 border-dashed border-muted-foreground/20 bg-muted/30 p-12 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+            <Shield className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <h3 className="mb-2 text-xl font-semibold">
+            Access Denied
+          </h3>
+          <p className="mb-4 text-sm text-muted-foreground max-w-md mx-auto">
+            You do not have permission to access this tool. This feature is 
+            currently limited to specific authorized accounts.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-6 md:py-12">

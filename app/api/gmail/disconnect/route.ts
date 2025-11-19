@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { revokeGmailToken } from "@/lib/gmail/tokens";
+import { hasGmailDeliverabilityAccess } from "@/lib/gmail/access-control";
 
 /**
  * POST /api/gmail/disconnect
@@ -20,6 +21,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
+      );
+    }
+
+    // Check if user has access to Gmail deliverability feature
+    if (!hasGmailDeliverabilityAccess(user.email)) {
+      return NextResponse.json(
+        { error: "Access denied. This feature is restricted to authorized users." },
+        { status: 403 }
       );
     }
 
