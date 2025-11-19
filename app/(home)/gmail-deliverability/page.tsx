@@ -25,7 +25,7 @@ interface GmailAccount {
 }
 
 // Feature flag: Set to false until Google verification is complete
-const GMAIL_TOOL_ENABLED = process.env.NEXT_PUBLIC_GMAIL_TOOL_ENABLED === "true";
+const GMAIL_TOOL_ENABLED = process.env.NEXT_PUBLIC_GMAIL_TOOL_ENABLED === "False";
 
 export default function GmailDeliverabilityPage() {
   const searchParams = useSearchParams();
