@@ -17,7 +17,7 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert";
-import { Mail, Search, AlertCircle, CheckCircle2, Clock, Shield, Lock } from "lucide-react";
+import { Mail, Search, AlertCircle, CheckCircle2, Shield, Lock } from "lucide-react";
 import { hasGmailDeliverabilityAccess } from "@/lib/gmail/access-control";
 
 interface GmailAccount {
@@ -25,9 +25,6 @@ interface GmailAccount {
   email: string;
   created_at: string;
 }
-
-// Feature flag: Set to false until Google verification is complete
-const GMAIL_TOOL_ENABLED = process.env.NEXT_PUBLIC_GMAIL_TOOL_ENABLED === "False";
 
 export default function GmailDeliverabilityPage() {
   const searchParams = useSearchParams();
@@ -40,7 +37,7 @@ export default function GmailDeliverabilityPage() {
   const hasAccess = hasGmailDeliverabilityAccess(user?.email);
 
   useEffect(() => {
-    if (GMAIL_TOOL_ENABLED && hasAccess) {
+    if (hasAccess) {
       loadAccounts();
       checkQueryParams();
     } else {
@@ -176,36 +173,8 @@ export default function GmailDeliverabilityPage() {
         </div>
       </div>
 
-      {/* Coming Soon Alert */}
-      {!GMAIL_TOOL_ENABLED && (
-        <Alert className="mb-8 border-amber-500/50 bg-amber-500/10">
-          <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-          <AlertTitle className="text-amber-900 dark:text-amber-100">
-            Coming Soon
-          </AlertTitle>
-          <AlertDescription className="mt-2 text-amber-800 dark:text-amber-200">
-            <p className="mb-3">
-              This tool is currently pending Google verification. The Gmail Deliverability Viewer 
-              requires Google's approval before it can be made available to all users.
-            </p>
-            <div className="space-y-2 text-sm">
-              <p className="font-medium">What this means:</p>
-              <ul className="list-disc list-inside space-y-1 ml-2">
-                <li>The tool is fully built and ready to use</li>
-                <li>We're waiting for Google to complete the verification process</li>
-                <li>Once verified, the tool will be available to everyone</li>
-              </ul>
-              <p className="mt-3 pt-3 border-t border-amber-500/20">
-                <strong>Expected timeline:</strong> Verification typically takes 2-4 weeks. 
-                We'll notify you as soon as the tool becomes available.
-              </p>
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
-
       {/* Main Content */}
-      {GMAIL_TOOL_ENABLED ? (
+      {hasAccess ? (
         <Tabs defaultValue="search" className="space-y-6">
           <TabsList>
             <TabsTrigger value="search" className="flex items-center gap-2">
@@ -254,20 +223,7 @@ export default function GmailDeliverabilityPage() {
             />
           </TabsContent>
         </Tabs>
-      ) : (
-        <div className="rounded-lg border-2 border-dashed border-muted-foreground/20 bg-muted/30 p-12 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-            <Shield className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h3 className="mb-2 text-xl font-semibold">
-            Tool Temporarily Unavailable
-          </h3>
-          <p className="mb-4 text-sm text-muted-foreground max-w-md mx-auto">
-            This tool is pending Google verification. All functionality is disabled 
-            until verification is complete. Please check back soon!
-          </p>
-        </div>
-      )}
+      ) : null}
 
       {/* Info Card */}
       <div className="mt-8 rounded-lg border bg-muted/50 p-6">
