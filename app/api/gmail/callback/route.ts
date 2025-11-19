@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { exchangeCodeForTokens, getUserEmail } from "@/lib/gmail/oauth";
 import { storeGmailTokens } from "@/lib/gmail/tokens";
 import { cookies } from "next/headers";
+import { hasGmailDeliverabilityAccess } from "@/lib/gmail/access-control";
 
 /**
  * GET /api/gmail/callback
@@ -21,6 +22,13 @@ export async function GET(request: NextRequest) {
     if (authError || !user) {
       return NextResponse.redirect(
         new URL("/auth/login?error=unauthorized", request.url)
+      );
+    }
+
+    // Check if user has access to Gmail deliverability feature
+    if (!hasGmailDeliverabilityAccess(user.email)) {
+      return NextResponse.redirect(
+        new URL("/gmail-deliverability?error=access_denied", request.url)
       );
     }
 

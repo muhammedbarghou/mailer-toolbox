@@ -4,6 +4,7 @@ import {
   getOwnedGmailAccounts,
   getSharedGmailAccounts,
 } from "@/lib/gmail/permissions";
+import { hasGmailDeliverabilityAccess } from "@/lib/gmail/access-control";
 
 /**
  * GET /api/gmail/accounts
@@ -23,6 +24,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
+      );
+    }
+
+    // Check if user has access to Gmail deliverability feature
+    if (!hasGmailDeliverabilityAccess(user.email)) {
+      return NextResponse.json(
+        { error: "Access denied. This feature is restricted to authorized users." },
+        { status: 403 }
       );
     }
 

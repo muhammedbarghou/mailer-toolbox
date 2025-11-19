@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { refreshGmailToken } from "@/lib/gmail/tokens";
+import { hasGmailDeliverabilityAccess } from "@/lib/gmail/access-control";
 
 /**
  * POST /api/gmail/refresh
@@ -14,6 +15,14 @@ export async function POST(request: NextRequest) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
+    // If user is authenticated, check access
+    if (user && !hasGmailDeliverabilityAccess(user.email)) {
+      return NextResponse.json(
+        { error: "Access denied. This feature is restricted to authorized users." },
+        { status: 403 }
+      );
+    }
 
     // Get account ID from request body (optional)
     const body = await request.json().catch(() => ({}));

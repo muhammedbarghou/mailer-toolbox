@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getGmailTokens, refreshGmailToken } from "@/lib/gmail/tokens";
 import { checkViewerPermission } from "@/lib/gmail/permissions";
 import { createGmailClient, searchAndGetMessages } from "@/lib/gmail/client";
+import { hasGmailDeliverabilityAccess } from "@/lib/gmail/access-control";
 
 /**
  * POST /api/gmail/search
@@ -22,6 +23,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
+      );
+    }
+
+    // Check if user has access to Gmail deliverability feature
+    if (!hasGmailDeliverabilityAccess(user.email)) {
+      return NextResponse.json(
+        { error: "Access denied. This feature is restricted to authorized users." },
+        { status: 403 }
       );
     }
 
