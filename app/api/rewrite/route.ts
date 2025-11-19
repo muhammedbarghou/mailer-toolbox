@@ -324,7 +324,7 @@ IMPORTANT: Return ONLY the rewritten HTML email code. Do not include any explana
 const PROMPT_VERSION = process.env.PROMPT_VERSION || "v1.0";
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-const GOOGLE_API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+// Note: We do NOT use GOOGLE_API_KEY from environment - we require users to provide their own API key
 
 // Initialize Redis client
 const redis = REDIS_URL && REDIS_TOKEN
@@ -377,39 +377,66 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Get API key: try user's key first, then fall back to environment variable
+    // Get API key: MUST use user's key if authenticated, never fall back to environment variable
     let apiKeyToUse: string | null = null;
+    let apiKeySource = "user";
     
     try {
       const supabase = await createClient();
       const {
         data: { user },
+        error: authError,
       } = await supabase.auth.getUser();
 
-      if (user) {
-        // Try to get user's API key
-        const userApiKey = await getUserApiKey(user.id, "gemini");
-        if (userApiKey) {
-          apiKeyToUse = userApiKey;
-        }
+      if (authError) {
+        console.error("Auth error:", authError);
+        return NextResponse.json(
+          { 
+            error: "Authentication required. Please log in to use this feature." 
+          },
+          { status: 401 }
+        );
       }
+
+      if (!user) {
+        return NextResponse.json(
+          { 
+            error: "Authentication required. Please log in to use this feature." 
+          },
+          { status: 401 }
+        );
+      }
+
+      // MUST get user's API key - no fallback to environment variable
+      const userApiKey = await getUserApiKey(user.id, "gemini");
+      if (!userApiKey) {
+        return NextResponse.json(
+          { 
+            error: "No API key configured. Please add your Gemini API key in Settings to use this feature." 
+          },
+          { status: 400 }
+        );
+      }
+
+      apiKeyToUse = userApiKey;
+      console.log(`Using user API key for user ${user.id}`);
     } catch (error) {
       console.error("Error getting user API key:", error);
-      // Fall through to use environment variable
-    }
-
-    // Fall back to environment variable if no user key
-    if (!apiKeyToUse) {
-      apiKeyToUse = GOOGLE_API_KEY || null;
+      return NextResponse.json(
+        { 
+          error: "Failed to retrieve your API key. Please check your Settings." 
+        },
+        { status: 500 }
+      );
     }
 
     // Validate API key is available
     if (!apiKeyToUse) {
       return NextResponse.json(
         { 
-          error: "No API key configured. Please add your Gemini API key in Settings, or set GOOGLE_GENERATIVE_AI_API_KEY in environment variables." 
+          error: "No API key configured. Please add your Gemini API key in Settings." 
         },
-        { status: 500 }
+        { status: 400 }
       );
     }
 
@@ -440,7 +467,7 @@ export async function POST(request: NextRequest) {
         // Handle specific Google API errors that shouldn't be retried
         if (error?.statusCode === 401 || error?.status === 401) {
           return NextResponse.json(
-            { error: "Invalid Google API key. Please check your API key in Settings or your GOOGLE_GENERATIVE_AI_API_KEY environment variable." },
+            { error: `Invalid Google API key (source: ${apiKeySource}). Please check your API key in Settings.` },
             { status: 500 }
           );
         }
@@ -471,7 +498,7 @@ export async function POST(request: NextRequest) {
             continue; // Retry
           } else {
             return NextResponse.json(
-              { error: "Google API quota exceeded or rate limit reached. Please check your billing and try again later." },
+              { error: `Google API quota exceeded or rate limit reached (using ${apiKeySource} API key). Please check your billing and try again later.` },
               { status: 500 }
             );
           }
@@ -512,7 +539,7 @@ export async function POST(request: NextRequest) {
       }
       if (lastError?.statusCode === 429 || lastError?.status === 429 || lastError?.message?.includes("quota")) {
         return NextResponse.json(
-          { error: "Google API quota exceeded or rate limit reached. Please try again in a few moments." },
+          { error: `Google API quota exceeded or rate limit reached (using ${apiKeySource} API key). Please try again in a few moments.` },
           { status: 500 }
         );
       }
