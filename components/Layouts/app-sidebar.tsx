@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { FileText, Inbox, Network, ImageIcon, Sparkles, PanelsRightBottom, Scissors, Layers, Home, Mail, Settings, Search } from "lucide-react"
+import { FileText, Inbox, Network, ImageIcon, Sparkles, PanelsRightBottom, Scissors, Layers, Home, Mail, Settings } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -17,17 +17,6 @@ import {
 } from "@/components/ui/sidebar"
 
 const toolCategories = [
-  {
-    category: "Deliverability",
-    tools: [
-      {
-        href: "/gmail-deliverability",
-        title: "Gmail Deliverability Viewer",
-        icon: Search,
-        badge: "New",
-      },
-    ],
-  },
   {
     category: "Email Processing",
     tools: [
