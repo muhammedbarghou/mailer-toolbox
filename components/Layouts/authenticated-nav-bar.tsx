@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import Logo from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import { ModeToggle } from "@/components/mode-toggle"
 import { useAuth } from "@/contexts/AuthContext"
@@ -17,6 +16,8 @@ import {
 import { User, LogOut, Settings, Home } from "lucide-react"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import Image from "next/image"
+
 
 export default function AuthenticatedNavbar() {
   const router = useRouter()
@@ -47,8 +48,11 @@ export default function AuthenticatedNavbar() {
       <div className=" mx-auto flex h-16 items-center justify-between px-4 md:px-6">
         {/* Logo */}
         <Link href="/home" className="flex items-center">
-          <SidebarTrigger  />
-          <Logo />
+          <SidebarTrigger  className="mr-2"/>
+          <Image className="mr-2" src="/AppLogo.png" alt="logo" width={40} height={40} />
+          <span className="font-bold text-lg ml-2">
+            Mailer Toolkit
+          </span>
         </Link>
 
         {/* Right side: User Menu + Theme Toggle */}
