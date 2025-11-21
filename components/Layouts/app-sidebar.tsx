@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { FileText, Inbox, Network, ImageIcon, Sparkles, PanelsRightBottom, Scissors, Layers, Home, Mail,} from "lucide-react"
+import { FileText, Inbox, Network, ImageIcon, Sparkles, PanelsRightBottom, Scissors, Layers, Home, Mail, Search} from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -42,13 +42,18 @@ const toolCategories = [
       },
       {
         href: "/eml-text-extractor",
-        title: "Merge Text Plain",
+        title: "Merge Tool",
         icon: Scissors,
       },
       {
         href: "/email-source-separator",
         title: "Email Source Separator",
         icon: Layers,
+      },
+      {
+        href: "/gmail-deliverability",
+        title: "Gmail Deliverability Viewer",
+        icon: Search,
       },
     ],
   },
