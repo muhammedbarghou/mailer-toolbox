@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { Ubuntu } from "next/font/google"
+import {  IBM_Plex_Mono } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "sonner"
@@ -10,8 +10,8 @@ import { ErrorBoundary } from "@/components/ui/error-boundary"
 
 
 
-const ubuntu = Ubuntu({
-  variable: "--font-ubuntu",
+const ibmPlexMono = IBM_Plex_Mono({
+  variable: "--font-ibm-plex-mono",
   subsets: ["latin"],
   weight: ["400", "500", "700"],
 })
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   title: "Mailer toolbox",
   description: "Your all-in-one suite of essential email and IP tools, designed to simplify your workflow and enhance productivity.",
   icons: {
-    icon: "/Logo.svg",
+    icon: "/AppLogo.png",
   },
 }
 
@@ -30,8 +30,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`light ${ubuntu.variable}`} style={{ colorScheme: "light" }}>
-      <body suppressHydrationWarning className={`m-0 p-0 overflow-x-hidden ${ubuntu.className}`}>
+    <html lang="en" className={`light ${ibmPlexMono.variable}`} style={{ colorScheme: "light" }}>
+      <body suppressHydrationWarning className={`m-0 p-0 overflow-x-hidden ${ibmPlexMono.className} light`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

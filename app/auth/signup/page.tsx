@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import Link from "next/link"
-import Logo from "@/components/logo"
 import { Chrome } from "lucide-react"
+import Image from "next/image"
 
 export default function SignupPage() {
   const [name, setName] = useState("")
@@ -66,9 +66,6 @@ export default function SignupPage() {
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md space-y-8">
         <div className="flex flex-col items-center space-y-4">
-          <Link href="/">
-            <Logo />
-          </Link>
           <div className="text-center space-y-2">
             <h1 className="text-3xl font-bold">Create Account</h1>
             <p className="text-muted-foreground">

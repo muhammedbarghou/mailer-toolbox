@@ -36,10 +36,13 @@ import {
   Mail,
   Lock,
   Calendar,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import type { ApiKeyProvider } from "@/lib/api-keys";
+import TermsOfService from "@/components/Policies/terms";
+import PrivacyPolicy from "@/components/Policies/privacy";
 
 interface ApiKey {
   id: string;
@@ -845,6 +848,46 @@ export default function SettingsPage() {
           <p>
             • We never log or expose your API keys in error messages or logs.
           </p>
+        </CardContent>
+      </Card>
+
+      {/* Terms of Service */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Terms of Service
+          </CardTitle>
+          <CardDescription>
+            Please read our terms of service carefully.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="max-h-[600px] overflow-y-auto border rounded-lg p-4">
+            <div className="[&>div]:min-h-0 [&>div]:bg-transparent [&>div>div]:max-w-none [&>div>div]:mx-0 [&>div>div]:py-4 [&>div>div]:px-0">
+              <TermsOfService />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Privacy Policy */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Privacy Policy
+          </CardTitle>
+          <CardDescription>
+            Learn how we protect and handle your data.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="max-h-[600px] overflow-y-auto border rounded-lg p-4">
+            <div className="[&>div]:min-h-0 [&>div]:bg-transparent [&>div>div]:max-w-none [&>div>div]:mx-0 [&>div>div]:py-4 [&>div>div]:px-0">
+              <PrivacyPolicy />
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

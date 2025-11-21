@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import Link from "next/link"
-import Logo from "@/components/logo"
 
 export default function ResetPasswordPage() {
   const [email, setEmail] = useState("")
@@ -41,9 +40,6 @@ export default function ResetPasswordPage() {
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md space-y-8">
           <div className="flex flex-col items-center space-y-4">
-            <Link href="/">
-              <Logo />
-            </Link>
             <div className="text-center space-y-2">
               <h1 className="text-3xl font-bold">Check Your Email</h1>
               <p className="text-muted-foreground">
@@ -79,9 +75,6 @@ export default function ResetPasswordPage() {
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md space-y-8">
         <div className="flex flex-col items-center space-y-4">
-          <Link href="/">
-            <Logo />
-          </Link>
           <div className="text-center space-y-2">
             <h1 className="text-3xl font-bold">Reset Password</h1>
             <p className="text-muted-foreground">

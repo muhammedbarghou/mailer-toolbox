@@ -70,7 +70,6 @@ const Contact = ({
 
   return (
     <section className="py-32">
-      <div className="container">
         <div className="mx-auto flex max-w-7xl flex-col justify-between gap-10 lg:flex-row lg:gap-20">
           {/* Info Section */}
           <div className="mx-auto flex max-w-sm flex-col justify-between gap-10">
@@ -79,23 +78,6 @@ const Contact = ({
                 {title}
               </h1>
               <p className="text-muted-foreground">{description}</p>
-            </div>
-            <div className="mx-auto w-fit lg:mx-0">
-              <h3 className="mb-6 text-center text-2xl font-semibold lg:text-left">
-                Contact Details
-              </h3>
-              <ul className="ml-4 list-disc">
-                <li>
-                  <span className="font-bold">Phone: </span>
-                  {phone}
-                </li>
-                <li>
-                  <span className="font-bold">Email: </span>
-                  <a href={`mailto:${email}`} className="underline">
-                    {email}
-                  </a>
-                </li>
-              </ul>
             </div>
           </div>
 
@@ -167,7 +149,6 @@ const Contact = ({
             </Button>
           </form>
         </div>
-      </div>
     </section>
   );
 };
