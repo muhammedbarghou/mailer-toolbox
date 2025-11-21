@@ -53,6 +53,14 @@ const PRESETS = {
       "Cc:": false,
       "X-Entity-ID:": true,
     },
+    fieldsToAdd: {
+      "List-Unsubscribe:": true,
+      "List-Unsubscribe-Post:": true,
+    },
+    fieldsToModify: {
+      "To:": true,
+      "Date:": true,
+    },
   },
   minimal: {
     name: "Minimal",
@@ -75,11 +83,40 @@ const PRESETS = {
       "Cc:": true,
       "X-Entity-ID:": true,
     },
+    fieldsToAdd: {
+      "List-Unsubscribe:": false,
+      "List-Unsubscribe-Post:": false,
+    },
+    fieldsToModify: {
+      "To:": false,
+      "Date:": false,
+    },
   },
   custom: {
     name: "Custom",
     description: "Configure your own settings",
     fieldsToRemove: {},
+    fieldsToAdd: {
+      "List-Unsubscribe:": true,
+      "List-Unsubscribe-Post:": true,
+    },
+    fieldsToModify: {
+      "To:": true,
+      "Date:": true,
+    },
+  },
+}
+
+const AVAILABLE_HEADERS_TO_ADD = {
+  "List-Unsubscribe:": {
+    label: "List-Unsubscribe",
+    description: "Add unsubscribe header for email compliance",
+    value: "List-Unsubscribe: <mailto:unsubscribe@[P_RPATH]>, <http://[P_RPATH]/[OPTDOWN]>",
+  },
+  "List-Unsubscribe-Post:": {
+    label: "List-Unsubscribe-Post",
+    description: "Add one-click unsubscribe support",
+    value: "List-Unsubscribe-Post: List-Unsubscribe=One-Click",
   },
 }
 
@@ -151,14 +188,22 @@ function processEmail(input: string, config: any): string {
           outputLines.push(...currentHeader)
           currentHeader = []
         }
-        outputLines.push(line)
+        if (config.fieldsToModify["Date:"]) {
+          outputLines.push("Date: [D=>%a, %d %b %Y %H:%M:%S] +0000")
+        } else {
+          outputLines.push(line)
+        }
       } else if (line.startsWith("To:")) {
         if (currentHeader.length > 0) {
           outputLines.push(...currentHeader)
           currentHeader = []
         }
-        outputLines.push("To: [*to]")
-        outputLines.push("Cc: [*to]")
+        if (config.fieldsToModify["To:"]) {
+          outputLines.push("To: [*to]")
+          outputLines.push("Cc: [*to]")
+        } else {
+          outputLines.push(line)
+        }
       } else if (line.startsWith("From:")) {
         if (currentHeader.length > 0) {
           outputLines.push(...currentHeader)
@@ -226,8 +271,13 @@ function processEmail(input: string, config: any): string {
           outputLines.push(...currentHeader)
           currentHeader = []
         }
-        outputLines.push("List-Unsubscribe: <mailto:unsubscribe@[P_RPATH]>, <http://[P_RPATH]/[OPTDOWN]>")
-        hasListUnsubscribe = true
+        if (config.fieldsToAdd["List-Unsubscribe:"]) {
+          outputLines.push("List-Unsubscribe: <mailto:unsubscribe@[P_RPATH]>, <http://[P_RPATH]/[OPTDOWN]>")
+          hasListUnsubscribe = true
+        } else {
+          // Skip existing List-Unsubscribe if not configured to add
+          hasListUnsubscribe = false
+        }
       } else if (line.startsWith("Content-Type:")) {
         if (currentHeader.length > 0) {
           outputLines.push(...currentHeader)
@@ -255,6 +305,10 @@ function processEmail(input: string, config: any): string {
           outputLines.push(...currentHeader)
           currentHeader = []
         }
+        // Only keep if configured to add
+        if (config.fieldsToAdd["List-Unsubscribe-Post:"]) {
+          outputLines.push(line)
+        }
       } else if (
         line.startsWith("Reply-To:") ||
         line.startsWith("Feedback-ID:") ||
@@ -281,21 +335,31 @@ function processEmail(input: string, config: any): string {
     outputLines.push(...currentHeader)
   }
 
+  // Add headers based on configuration
   const fromIndex = outputLines.findIndex((line) => line.startsWith("From:"))
 
-  if (!hasListUnsubscribe) {
+  if (config.fieldsToAdd["List-Unsubscribe:"] && !hasListUnsubscribe) {
     const senderIndex = outputLines.findIndex((line) => line.startsWith("Sender:"))
     const insertIndex = senderIndex !== -1 ? senderIndex + 1 : fromIndex !== -1 ? fromIndex + 1 : outputLines.length
-    outputLines.splice(
-      insertIndex,
-      0,
-      "List-Unsubscribe: <mailto:unsubscribe@[P_RPATH]>, <http://[P_RPATH]/[OPTDOWN]>",
-      "List-Unsubscribe-Post: List-Unsubscribe=One-Click",
-    )
-  } else {
+    
+    const headersToInsert: string[] = []
+    if (config.fieldsToAdd["List-Unsubscribe:"]) {
+      headersToInsert.push("List-Unsubscribe: <mailto:unsubscribe@[P_RPATH]>, <http://[P_RPATH]/[OPTDOWN]>")
+    }
+    if (config.fieldsToAdd["List-Unsubscribe-Post:"]) {
+      headersToInsert.push("List-Unsubscribe-Post: List-Unsubscribe=One-Click")
+    }
+    
+    if (headersToInsert.length > 0) {
+      outputLines.splice(insertIndex, 0, ...headersToInsert)
+    }
+  } else if (hasListUnsubscribe && config.fieldsToAdd["List-Unsubscribe-Post:"]) {
     const listUnsubIndex = outputLines.findIndex((line) => line.startsWith("List-Unsubscribe:"))
     if (listUnsubIndex !== -1) {
-      outputLines.splice(listUnsubIndex + 1, 0, "List-Unsubscribe-Post: List-Unsubscribe=One-Click")
+      const postIndex = outputLines.findIndex((line, idx) => idx > listUnsubIndex && line.startsWith("List-Unsubscribe-Post:"))
+      if (postIndex === -1) {
+        outputLines.splice(listUnsubIndex + 1, 0, "List-Unsubscribe-Post: List-Unsubscribe=One-Click")
+      }
     }
   }
 
@@ -308,7 +372,11 @@ export default function EmailHeaderProcessor() {
   const [showSettings, setShowSettings] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const [selectedPreset, setSelectedPreset] = useState<keyof typeof PRESETS>("standard")
-  const [config, setConfig] = useState(PRESETS.standard)
+  const [config, setConfig] = useState({
+    ...PRESETS.standard,
+    fieldsToAdd: { ...PRESETS.standard.fieldsToAdd },
+    fieldsToModify: { ...PRESETS.standard.fieldsToModify },
+  })
   const [processing, setProcessing] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -318,10 +386,15 @@ export default function EmailHeaderProcessor() {
 
   const handleFilesUpload = useCallback(
     async (fileList: FileList) => {
-      const fileArray = Array.from(fileList).filter((file) => file.name.endsWith(".eml"))
+      // Accept text-based files (.eml, .txt, and other text files)
+      const textFileExtensions = [".eml", ".txt", ".text", ".msg", ".email"]
+      const fileArray = Array.from(fileList).filter((file) => {
+        const fileName = file.name.toLowerCase()
+        return textFileExtensions.some((ext) => fileName.endsWith(ext)) || file.type.startsWith("text/")
+      })
 
       if (fileArray.length === 0) {
-        alert("Please upload .eml files only")
+        alert("Please upload text-based files (.eml, .txt, etc.)")
         return
       }
 
@@ -407,7 +480,10 @@ export default function EmailHeaderProcessor() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `processed-${file.name.replace(".eml", ".txt")}`
+      // Extract file extension and replace with .txt
+      const fileExtension = file.name.substring(file.name.lastIndexOf("."))
+      const baseName = file.name.substring(0, file.name.lastIndexOf(".")) || file.name
+      a.download = `processed-${baseName}.txt`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -431,7 +507,10 @@ export default function EmailHeaderProcessor() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `processed-${file.name.replace(".eml", ".txt")}` // Changed here
+      // Extract file extension and replace with .txt
+      const fileExtension = file.name.substring(file.name.lastIndexOf("."))
+      const baseName = file.name.substring(0, file.name.lastIndexOf(".")) || file.name
+      a.download = `processed-${baseName}.txt`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -481,7 +560,13 @@ export default function EmailHeaderProcessor() {
 
   const handlePresetChange = useCallback((preset: keyof typeof PRESETS) => {
     setSelectedPreset(preset)
-    setConfig(PRESETS[preset] as any)
+    const presetConfig = PRESETS[preset]
+    setConfig({
+      ...presetConfig,
+      fieldsToRemove: preset === "custom" ? {} : { ...presetConfig.fieldsToRemove },
+      fieldsToAdd: { ...presetConfig.fieldsToAdd },
+      fieldsToModify: { ...presetConfig.fieldsToModify },
+    } as any)
   }, [])
 
   const copyToClipboard = useCallback(async (text: string) => {
@@ -514,7 +599,7 @@ export default function EmailHeaderProcessor() {
             </div>
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-foreground">Email Header Processor - Batch Mode</h1>
-              <p className="text-sm text-muted-foreground mt-1">Process up to 20 email files at once</p>
+              <p className="text-sm text-muted-foreground mt-1">Process up to 20 text-based files at once (.eml, .txt, etc.)</p>
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={() => setShowSettings(!showSettings)} className="gap-2">
@@ -552,6 +637,82 @@ export default function EmailHeaderProcessor() {
                     <p className="text-xs text-muted-foreground">{preset.description}</p>
                   </button>
                 ))}
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <label className="text-sm font-medium text-foreground mb-3 block">Headers to Add</label>
+              <div className="space-y-3">
+                {Object.entries(AVAILABLE_HEADERS_TO_ADD).map(([key, header]) => (
+                  <label
+                    key={key}
+                    className="flex items-start gap-3 text-sm text-foreground cursor-pointer p-3 rounded-lg border border-border hover:bg-accent transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={config.fieldsToAdd[key as keyof typeof config.fieldsToAdd] || false}
+                      onChange={(e) =>
+                        setConfig({
+                          ...config,
+                          fieldsToAdd: { ...config.fieldsToAdd, [key]: e.target.checked },
+                        })
+                      }
+                      className="rounded mt-1"
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium">{header.label}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{header.description}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <label className="text-sm font-medium text-foreground mb-3 block">Fields to Modify</label>
+              <div className="space-y-3">
+                <label className="flex items-start gap-3 text-sm text-foreground cursor-pointer p-3 rounded-lg border border-border hover:bg-accent transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={config.fieldsToModify["To:"] || false}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        fieldsToModify: { ...config.fieldsToModify, "To:": e.target.checked },
+                      })
+                    }
+                    className="rounded mt-1"
+                  />
+                  <div className="flex-1">
+                    <div className="font-medium">To: Field</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {config.fieldsToModify["To:"]
+                        ? "Will be changed to: To: [*to]"
+                        : "Will keep the original To: value"}
+                    </div>
+                  </div>
+                </label>
+                <label className="flex items-start gap-3 text-sm text-foreground cursor-pointer p-3 rounded-lg border border-border hover:bg-accent transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={config.fieldsToModify["Date:"] || false}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        fieldsToModify: { ...config.fieldsToModify, "Date:": e.target.checked },
+                      })
+                    }
+                    className="rounded mt-1"
+                  />
+                  <div className="flex-1">
+                    <div className="font-medium">Date: Field</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {config.fieldsToModify["Date:"]
+                        ? "Will be changed to: Date: [D=>%a, %d %b %Y %H:%M:%S] +0000"
+                        : "Will keep the original Date: value"}
+                    </div>
+                  </div>
+                </label>
               </div>
             </div>
 
@@ -635,7 +796,7 @@ export default function EmailHeaderProcessor() {
                   </Button>
                   <input
                     type="file"
-                    accept=".eml"
+                    accept=".eml,.txt,.text,.msg,.email,text/*"
                     multiple
                     onChange={(e) => e.target.files && handleFilesUpload(e.target.files)}
                     className="hidden"
@@ -657,8 +818,9 @@ export default function EmailHeaderProcessor() {
               }`}
             >
               <FolderOpen size={48} className="mx-auto mb-4 text-muted-foreground" />
-              <p className="text-sm text-foreground font-medium mb-1">Drop .eml files here</p>
-              <p className="text-xs text-muted-foreground">or click the upload button above</p>
+              <p className="text-sm text-foreground font-medium mb-1">Drop text files here</p>
+              <p className="text-xs text-muted-foreground">(.eml, .txt, .text, .msg, .email)</p>
+              <p className="text-xs text-muted-foreground mt-1">or click the upload button above</p>
               <p className="text-xs text-muted-foreground mt-2">Maximum 20 files</p>
             </div>
 

@@ -172,7 +172,7 @@ export default function SubjectRewritePage() {
           <div className="flex items-center justify-center gap-3 pt-4 flex-wrap">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
               <Zap className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium">Powered by Gemini 2.0 Flash</span>
+              <span className="text-sm font-medium">Powered by Gemini 2.5 Flash</span>
             </div>
             {rateLimitInfo && (
               <div

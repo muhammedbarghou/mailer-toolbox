@@ -3,14 +3,17 @@
 import { useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { toast } from "sonner"
-import { Upload, Download, FileText, X, AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
+import { Upload, Download, FileText, X, AlertCircle, CheckCircle2, Loader2, Code, FileCode } from "lucide-react"
 import { useFileUpload, formatBytes } from "@/hooks/use-file-upload"
+
+type TabType = "text" | "html" | "header"
 
 interface ProcessedFile {
   id: string
   name: string
-  plainText: string
+  content: string
   size: number
   status: "pending" | "processing" | "completed" | "error"
   error?: string
@@ -112,6 +115,14 @@ const decodeQuotedPrintable = (value: string): string => {
   return normalized.replace(/=([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
 }
 
+const decodeBase64 = (value: string): string => {
+  try {
+    return atob(value.replace(/\s/g, ""))
+  } catch {
+    return value
+  }
+}
+
 const cleanText = (value: string): string => {
   if (!value.trim()) {
     return ""
@@ -188,6 +199,42 @@ const collectPlainTextSections = (section: EmailSection, collectedSections: stri
   collectedSections.push(cleaned)
 }
 
+const collectHtmlSections = (section: EmailSection, collectedSections: string[]): void => {
+  const contentType = getHeaderValue(section.headers, "content-type").toLowerCase()
+  const transferEncoding = getHeaderValue(section.headers, "content-transfer-encoding").toLowerCase()
+
+  if (contentType.startsWith("multipart/")) {
+    const boundary = getBoundary(section.headers)
+    const childSections = splitMultipartBody(section.body, boundary)
+    if (childSections.length === 0) {
+      return
+    }
+
+    for (const childSection of childSections) {
+      collectHtmlSections(childSection, collectedSections)
+    }
+    return
+  }
+
+  const isHtml = contentType.includes("text/html")
+  if (!isHtml) {
+    return
+  }
+
+  let resolvedBody = section.body
+  if (transferEncoding.includes("quoted-printable")) {
+    resolvedBody = decodeQuotedPrintable(resolvedBody)
+  } else if (transferEncoding.includes("base64")) {
+    resolvedBody = decodeBase64(resolvedBody)
+  }
+
+  if (!resolvedBody.trim()) {
+    return
+  }
+
+  collectedSections.push(resolvedBody.trim())
+}
+
 const extractPlainText = (rawEmailContent: string): string => {
   const normalizedContent = normalizeEmailContent(rawEmailContent)
   const rootSection = splitHeadersAndBody(normalizedContent)
@@ -205,7 +252,34 @@ const extractPlainText = (rawEmailContent: string): string => {
   return collectedSections.join("\n\n")
 }
 
+const extractHtml = (rawEmailContent: string): string => {
+  const normalizedContent = normalizeEmailContent(rawEmailContent)
+  const rootSection = splitHeadersAndBody(normalizedContent)
+  const collectedSections: string[] = []
+
+  collectHtmlSections(rootSection, collectedSections)
+
+  return collectedSections.join("\n\n")
+}
+
+const extractHeaders = (rawEmailContent: string): string => {
+  const normalizedContent = normalizeEmailContent(rawEmailContent)
+  const rootSection = splitHeadersAndBody(normalizedContent)
+
+  const headerLines: string[] = []
+  for (const [key, value] of Object.entries(rootSection.headers)) {
+    const formattedKey = key
+      .split("-")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join("-")
+    headerLines.push(`${formattedKey}: ${value}`)
+  }
+
+  return headerLines.join("\n")
+}
+
 export default function EmlTextExtractor() {
+  const [activeTab, setActiveTab] = useState<TabType>("text")
   const [processedFiles, setProcessedFiles] = useState<ProcessedFile[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
 
@@ -230,102 +304,145 @@ export default function EmlTextExtractor() {
     maxSize,
     accept: ".eml,message/rfc822",
     onFilesChange: (newFiles) => {
-      processFiles(newFiles)
+      processFiles(newFiles, activeTab)
     },
   })
 
-  const processFiles = useCallback(async (filesToProcess: typeof files) => {
-    if (filesToProcess.length === 0) return
+  const processFiles = useCallback(
+    async (filesToProcess: typeof files, tabType: TabType) => {
+      if (filesToProcess.length === 0) return
 
-    setIsProcessing(true)
-    const newProcessedFiles: ProcessedFile[] = []
+      setIsProcessing(true)
+      const newProcessedFiles: ProcessedFile[] = []
 
-    // Initialize files
-    for (const fileWrapper of filesToProcess) {
-      const file = fileWrapper.file instanceof File ? fileWrapper.file : null
-      if (!file) continue
+      // Initialize files
+      for (const fileWrapper of filesToProcess) {
+        const file = fileWrapper.file instanceof File ? fileWrapper.file : null
+        if (!file) continue
 
-      const processedFile: ProcessedFile = {
-        id: fileWrapper.id,
-        name: file.name.replace(/\.eml$/i, ""),
-        plainText: "",
-        size: file.size,
-        status: "processing",
+        const processedFile: ProcessedFile = {
+          id: fileWrapper.id,
+          name: file.name.replace(/\.eml$/i, ""),
+          content: "",
+          size: file.size,
+          status: "processing",
+        }
+
+        newProcessedFiles.push(processedFile)
       }
 
-      newProcessedFiles.push(processedFile)
-    }
+      setProcessedFiles(newProcessedFiles)
 
-    setProcessedFiles(newProcessedFiles)
+      // Process each file
+      for (let i = 0; i < filesToProcess.length; i++) {
+        const fileWrapper = filesToProcess[i]
+        const file = fileWrapper.file instanceof File ? fileWrapper.file : null
+        if (!file) continue
 
-    // Process each file
-    for (let i = 0; i < filesToProcess.length; i++) {
-      const fileWrapper = filesToProcess[i]
-      const file = fileWrapper.file instanceof File ? fileWrapper.file : null
-      if (!file) continue
+        try {
+          const emailContent = await file.text()
+          let extractedContent = ""
 
-      try {
-        const emailContent = await file.text()
-        const plainText = extractPlainText(emailContent)
+          switch (tabType) {
+            case "text":
+              extractedContent = extractPlainText(emailContent)
+              break
+            case "html":
+              extractedContent = extractHtml(emailContent)
+              break
+            case "header":
+              extractedContent = extractHeaders(emailContent)
+              break
+          }
 
-        setProcessedFiles((prev) =>
-          prev.map((pf) =>
-            pf.id === fileWrapper.id
-              ? {
-                  ...pf,
-                  plainText,
-                  status: plainText.trim() ? "completed" : "error",
-                  error: plainText.trim() ? undefined : "No plain text content found",
-                }
-              : pf,
-          ),
-        )
-      } catch (error) {
-        setProcessedFiles((prev) =>
-          prev.map((pf) =>
-            pf.id === fileWrapper.id
-              ? {
-                  ...pf,
-                  status: "error",
-                  error: "Failed to process file",
-                }
-              : pf,
-          ),
-        )
+          setProcessedFiles((prev) =>
+            prev.map((pf) =>
+              pf.id === fileWrapper.id
+                ? {
+                    ...pf,
+                    content: extractedContent,
+                    status: extractedContent.trim() ? "completed" : "error",
+                    error: extractedContent.trim() ? undefined : `No ${tabType} content found`,
+                  }
+                : pf,
+            ),
+          )
+        } catch (error) {
+          setProcessedFiles((prev) =>
+            prev.map((pf) =>
+              pf.id === fileWrapper.id
+                ? {
+                    ...pf,
+                    status: "error",
+                    error: "Failed to process file",
+                  }
+                : pf,
+            ),
+          )
+        }
       }
-    }
 
-    setIsProcessing(false)
+      setIsProcessing(false)
 
-    const completedCount = newProcessedFiles.length
-    if (completedCount > 0) {
-      toast.success(`${completedCount} file(s) processed successfully`)
+      const completedCount = newProcessedFiles.length
+      if (completedCount > 0) {
+        toast.success(`${completedCount} file(s) processed successfully`)
+      }
+    },
+    [],
+  )
+
+  const handleTabChange = async (value: string) => {
+    const newTab = value as TabType
+    setActiveTab(newTab)
+    
+    // If there are files, reprocess them for the new tab
+    if (files.length > 0) {
+      setProcessedFiles([])
+      await processFiles(files, newTab)
     }
-  }, [])
+  }
 
   const handleDownloadCombined = () => {
-    const completedFiles = processedFiles.filter((f) => f.status === "completed" && f.plainText.trim())
+    const completedFiles = processedFiles.filter((f) => f.status === "completed" && f.content.trim())
 
     if (completedFiles.length === 0) {
       toast.error("No processed files to download")
       return
     }
 
-    // Combine all plain texts with __SEP__ separator
-    const combinedText = completedFiles.map((file) => file.plainText.trim()).join("\n__SEP__\n")
-
     const timestamp = new Date().toISOString().split("T")[0]
-    const blob = new Blob([combinedText], {
-      type: "text/plain;charset=utf-8",
-    })
+    let combinedContent = ""
+    let fileExtension = ""
+    let mimeType = ""
+
+    switch (activeTab) {
+      case "text":
+        combinedContent = completedFiles.map((file) => file.content.trim()).join("\n__SEP__\n")
+        fileExtension = "txt"
+        mimeType = "text/plain;charset=utf-8"
+        break
+      case "html":
+        combinedContent = completedFiles.map((file) => file.content.trim()).join("\n\n<!-- __SEP__ -->\n\n")
+        fileExtension = "html"
+        mimeType = "text/html;charset=utf-8"
+        break
+      case "header":
+        combinedContent = completedFiles.map((file) => file.content.trim()).join("\n\n__SEP__\n\n")
+        fileExtension = "txt"
+        mimeType = "text/plain;charset=utf-8"
+        break
+    }
+
+    const blob = new Blob([combinedContent], { type: mimeType })
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = `extracted-texts_${timestamp}.txt`
+    link.download = `extracted-${activeTab}_${timestamp}.${fileExtension}`
     link.click()
     URL.revokeObjectURL(url)
 
-    toast.success(`Downloaded ${completedFiles.length} email(s) as combined text file`)
+    toast.success(`Downloaded ${completedFiles.length} email(s) as combined ${activeTab} file`)
   }
 
   const handleClearAll = () => {
@@ -336,11 +453,14 @@ export default function EmlTextExtractor() {
 
   const getTotalStats = () => {
     const completedFiles = processedFiles.filter((f) => f.status === "completed")
-    const totalChars = completedFiles.reduce((sum, f) => sum + f.plainText.length, 0)
-    const totalWords = completedFiles.reduce(
-      (sum, f) => sum + (f.plainText.trim() ? f.plainText.trim().split(/\s+/).length : 0),
-      0,
-    )
+    const totalChars = completedFiles.reduce((sum, f) => sum + f.content.length, 0)
+    const totalWords =
+      activeTab === "text"
+        ? completedFiles.reduce(
+            (sum, f) => sum + (f.content.trim() ? f.content.trim().split(/\s+/).length : 0),
+            0,
+          )
+        : 0
 
     return { totalChars, totalWords, fileCount: completedFiles.length }
   }
@@ -360,164 +480,516 @@ export default function EmlTextExtractor() {
     }
   }
 
+  const getTabDescription = () => {
+    switch (activeTab) {
+      case "text":
+        return "Extract plain text from multiple email files and combine them into a single file"
+      case "html":
+        return "Extract HTML content from multiple email files and combine them into a single file"
+      case "header":
+        return "Extract headers from multiple email files and combine them into a single file"
+    }
+  }
+
+  const getTabInfo = () => {
+    switch (activeTab) {
+      case "text":
+        return {
+          title: "How it works - Plain Text",
+          items: [
+            "Upload up to 50 .eml email files",
+            "Each email is processed to extract plain text content",
+            "Headers and HTML are automatically removed",
+            "All extracted texts are combined with '__SEP__' separator",
+            "Download the combined text file",
+          ],
+        }
+      case "html":
+        return {
+          title: "How it works - HTML",
+          items: [
+            "Upload up to 50 .eml email files",
+            "Each email is processed to extract HTML content",
+            "Only HTML parts are extracted from multipart emails",
+            "All extracted HTML are combined with '<!-- __SEP__ -->' separator",
+            "Download the combined HTML file",
+          ],
+        }
+      case "header":
+        return {
+          title: "How it works - Headers",
+          items: [
+            "Upload up to 50 .eml email files",
+            "Each email's headers are extracted and formatted",
+            "Headers are formatted with proper capitalization",
+            "All extracted headers are combined with '__SEP__' separator",
+            "Download the combined headers file",
+          ],
+        }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground p-4 md:p-8">
       <div className="max-w-5xl mx-auto space-y-6">
         {/* Header */}
         <div className="space-y-2">
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">EML Text Extractor</h1>
-          <p className="text-muted-foreground text-sm md:text-base">
-            Extract plain text from multiple email files and combine them into a single file
-          </p>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">EML Content Extractor</h1>
+          <p className="text-muted-foreground text-sm md:text-base">{getTabDescription()}</p>
         </div>
 
-        {/* Upload Area */}
-        <div
-          role="button"
-          onClick={openFileDialog}
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-          data-dragging={isDragging || undefined}
-          className="flex min-h-40 flex-col items-center justify-center rounded-xl border-2 border-dashed border-input p-4 transition-colors hover:bg-accent/50 has-disabled:pointer-events-none has-disabled:opacity-50 has-[input:focus]:border-ring has-[input:focus]:ring-[3px] has-[input:focus]:ring-ring/50 data-[dragging=true]:bg-accent/50 cursor-pointer"
-        >
-          <input {...getInputProps()} className="sr-only" aria-label="Upload files" />
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="text" className="flex items-center gap-2">
+              <FileText className="size-4" />
+              <span className="hidden sm:inline">Merge Text Plain</span>
+              <span className="sm:hidden">Text</span>
+            </TabsTrigger>
+            <TabsTrigger value="html" className="flex items-center gap-2">
+              <Code className="size-4" />
+              <span className="hidden sm:inline">Merge HTML</span>
+              <span className="sm:hidden">HTML</span>
+            </TabsTrigger>
+            <TabsTrigger value="header" className="flex items-center gap-2">
+              <FileCode className="size-4" />
+              <span className="hidden sm:inline">Merge Header</span>
+              <span className="sm:hidden">Header</span>
+            </TabsTrigger>
+          </TabsList>
 
-          <div className="flex flex-col items-center justify-center text-center">
+          <TabsContent value="text" className="space-y-6 mt-6">
+            {/* Upload Area */}
             <div
-              className="mb-2 flex size-11 shrink-0 items-center justify-center rounded-full border bg-background"
-              aria-hidden="true"
+              role="button"
+              onClick={openFileDialog}
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              data-dragging={isDragging || undefined}
+              className="flex min-h-40 flex-col items-center justify-center rounded-xl border-2 border-dashed border-input p-4 transition-colors hover:bg-accent/50 has-disabled:pointer-events-none has-disabled:opacity-50 has-[input:focus]:border-ring has-[input:focus]:ring-[3px] has-[input:focus]:ring-ring/50 data-[dragging=true]:bg-accent/50 cursor-pointer"
             >
-              <Upload className="size-4 opacity-60" />
-            </div>
-            <p className="mb-1.5 text-sm font-medium">Upload EML files</p>
-            <p className="mb-2 text-xs text-muted-foreground">Drag & drop or click to browse</p>
-            <div className="flex flex-wrap justify-center gap-1 text-xs text-muted-foreground/70">
-              <span>.eml files only</span>
-              <span>∙</span>
-              <span>Max {maxFiles} files</span>
-              <span>∙</span>
-              <span>Up to {formatBytes(maxSize)} per file</span>
-            </div>
-          </div>
-        </div>
+              <input {...getInputProps()} className="sr-only" aria-label="Upload files" />
 
-        {errors.length > 0 && (
-          <div className="flex items-center gap-1 text-xs text-destructive" role="alert">
-            <AlertCircle className="size-3 shrink-0" />
-            <span>{errors[0]}</span>
-          </div>
-        )}
-
-        {/* File List */}
-        {processedFiles.length > 0 && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Processed Files ({processedFiles.length})</h2>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="default"
-                  onClick={handleDownloadCombined}
-                  disabled={stats.fileCount === 0 || isProcessing}
+              <div className="flex flex-col items-center justify-center text-center">
+                <div
+                  className="mb-2 flex size-11 shrink-0 items-center justify-center rounded-full border bg-background"
+                  aria-hidden="true"
                 >
-                  <Download className="w-4 h-4 mr-2" />
-                  Download Combined ({stats.fileCount})
-                </Button>
-                <Button size="sm" variant="outline" onClick={handleClearAll}>
-                  Clear All
-                </Button>
+                  <Upload className="size-4 opacity-60" />
+                </div>
+                <p className="mb-1.5 text-sm font-medium">Upload EML files</p>
+                <p className="mb-2 text-xs text-muted-foreground">Drag & drop or click to browse</p>
+                <div className="flex flex-wrap justify-center gap-1 text-xs text-muted-foreground/70">
+                  <span>.eml files only</span>
+                  <span>∙</span>
+                  <span>Max {maxFiles} files</span>
+                  <span>∙</span>
+                  <span>Up to {formatBytes(maxSize)} per file</span>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-2">
-              {processedFiles.map((file) => (
-                <Card key={file.id} className="flex items-center justify-between gap-2 p-4">
-                  <div className="flex items-center gap-3 overflow-hidden flex-1">
-                    <div className="flex aspect-square size-10 shrink-0 items-center justify-center rounded border">
-                      {getStatusIcon(file.status)}
-                    </div>
-                    <div className="flex min-w-0 flex-col gap-0.5 flex-1">
-                      <p className="truncate text-[13px] font-medium">{file.name}.eml</p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{formatBytes(file.size)}</span>
-                        {file.status === "completed" && (
-                          <>
-                            <span>∙</span>
-                            <span>{file.plainText.length.toLocaleString()} chars</span>
-                            <span>∙</span>
-                            <span>{file.plainText.trim() ? file.plainText.trim().split(/\s+/).length : 0} words</span>
-                          </>
-                        )}
-                        {file.error && (
-                          <>
-                            <span>∙</span>
-                            <span className="text-destructive">{file.error}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+            {errors.length > 0 && (
+              <div className="flex items-center gap-1 text-xs text-destructive" role="alert">
+                <AlertCircle className="size-3 shrink-0" />
+                <span>{errors[0]}</span>
+              </div>
+            )}
 
-                  <div className="flex items-center gap-2">
+            {/* File List */}
+            {processedFiles.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Processed Files ({processedFiles.length})</h2>
+                  <div className="flex gap-2">
                     <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-8 text-muted-foreground/80 hover:bg-transparent hover:text-foreground"
-                      onClick={() => {
-                        removeFile(file.id)
-                        setProcessedFiles((prev) => prev.filter((f) => f.id !== file.id))
-                      }}
-                      aria-label="Remove file"
+                      size="sm"
+                      variant="default"
+                      onClick={handleDownloadCombined}
+                      disabled={stats.fileCount === 0 || isProcessing}
                     >
-                      <X className="size-4" aria-hidden="true" />
+                      <Download className="w-4 h-4 mr-2" />
+                      Download Combined ({stats.fileCount})
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleClearAll}>
+                      Clear All
                     </Button>
                   </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
+                </div>
 
-        {/* Stats */}
-        {stats.fileCount > 0 && (
-          <Card className="bg-muted/30 border-border">
-            <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
-              <div>
-                <p className="text-2xl font-bold">{stats.fileCount}</p>
-                <p className="text-xs text-muted-foreground">Files Processed</p>
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{stats.totalChars.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">Total Characters</p>
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{stats.totalWords.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">Total Words</p>
-              </div>
-            </div>
-          </Card>
-        )}
+                <div className="space-y-2">
+                  {processedFiles.map((file) => (
+                    <Card key={file.id} className="flex items-center justify-between gap-2 p-4">
+                      <div className="flex items-center gap-3 overflow-hidden flex-1">
+                        <div className="flex aspect-square size-10 shrink-0 items-center justify-center rounded border">
+                          {getStatusIcon(file.status)}
+                        </div>
+                        <div className="flex min-w-0 flex-col gap-0.5 flex-1">
+                          <p className="truncate text-[13px] font-medium">{file.name}.eml</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{formatBytes(file.size)}</span>
+                            {file.status === "completed" && (
+                              <>
+                                <span>∙</span>
+                                <span>{file.content.length.toLocaleString()} chars</span>
+                                <span>∙</span>
+                                <span>{file.content.trim() ? file.content.trim().split(/\s+/).length : 0} words</span>
+                              </>
+                            )}
+                            {file.error && (
+                              <>
+                                <span>∙</span>
+                                <span className="text-destructive">{file.error}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
 
-        {/* Info Card */}
-        {processedFiles.length === 0 && (
-          <Card className="bg-muted/30 border-border p-6">
-            <div className="space-y-2">
-              <h3 className="font-semibold flex items-center gap-2">
-                <FileText className="size-4" />
-                How it works
-              </h3>
-              <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-                <li>Upload up to 50 .eml email files</li>
-                <li>Each email is processed to extract plain text content</li>
-                <li>Headers and HTML are automatically removed</li>
-                <li>All extracted texts are combined with "__SEP__" separator</li>
-                <li>Download the combined text file</li>
-              </ul>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-8 text-muted-foreground/80 hover:bg-transparent hover:text-foreground"
+                          onClick={() => {
+                            removeFile(file.id)
+                            setProcessedFiles((prev) => prev.filter((f) => f.id !== file.id))
+                          }}
+                          aria-label="Remove file"
+                        >
+                          <X className="size-4" aria-hidden="true" />
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Stats */}
+            {stats.fileCount > 0 && (
+              <Card className="bg-muted/30 border-border">
+                <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-2xl font-bold">{stats.fileCount}</p>
+                    <p className="text-xs text-muted-foreground">Files Processed</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.totalChars.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Total Characters</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.totalWords.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Total Words</p>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* Info Card */}
+            {processedFiles.length === 0 && (
+              <Card className="bg-muted/30 border-border p-6">
+                <div className="space-y-2">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <FileText className="size-4" />
+                    {getTabInfo().title}
+                  </h3>
+                  <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                    {getTabInfo().items.map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="html" className="space-y-6 mt-6">
+            {/* Upload Area */}
+            <div
+              role="button"
+              onClick={openFileDialog}
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              data-dragging={isDragging || undefined}
+              className="flex min-h-40 flex-col items-center justify-center rounded-xl border-2 border-dashed border-input p-4 transition-colors hover:bg-accent/50 has-disabled:pointer-events-none has-disabled:opacity-50 has-[input:focus]:border-ring has-[input:focus]:ring-[3px] has-[input:focus]:ring-ring/50 data-[dragging=true]:bg-accent/50 cursor-pointer"
+            >
+              <input {...getInputProps()} className="sr-only" aria-label="Upload files" />
+
+              <div className="flex flex-col items-center justify-center text-center">
+                <div
+                  className="mb-2 flex size-11 shrink-0 items-center justify-center rounded-full border bg-background"
+                  aria-hidden="true"
+                >
+                  <Upload className="size-4 opacity-60" />
+                </div>
+                <p className="mb-1.5 text-sm font-medium">Upload EML files</p>
+                <p className="mb-2 text-xs text-muted-foreground">Drag & drop or click to browse</p>
+                <div className="flex flex-wrap justify-center gap-1 text-xs text-muted-foreground/70">
+                  <span>.eml files only</span>
+                  <span>∙</span>
+                  <span>Max {maxFiles} files</span>
+                  <span>∙</span>
+                  <span>Up to {formatBytes(maxSize)} per file</span>
+                </div>
+              </div>
             </div>
-          </Card>
-        )}
+
+            {errors.length > 0 && (
+              <div className="flex items-center gap-1 text-xs text-destructive" role="alert">
+                <AlertCircle className="size-3 shrink-0" />
+                <span>{errors[0]}</span>
+              </div>
+            )}
+
+            {/* File List */}
+            {processedFiles.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Processed Files ({processedFiles.length})</h2>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={handleDownloadCombined}
+                      disabled={stats.fileCount === 0 || isProcessing}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download Combined ({stats.fileCount})
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleClearAll}>
+                      Clear All
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {processedFiles.map((file) => (
+                    <Card key={file.id} className="flex items-center justify-between gap-2 p-4">
+                      <div className="flex items-center gap-3 overflow-hidden flex-1">
+                        <div className="flex aspect-square size-10 shrink-0 items-center justify-center rounded border">
+                          {getStatusIcon(file.status)}
+                        </div>
+                        <div className="flex min-w-0 flex-col gap-0.5 flex-1">
+                          <p className="truncate text-[13px] font-medium">{file.name}.eml</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{formatBytes(file.size)}</span>
+                            {file.status === "completed" && (
+                              <>
+                                <span>∙</span>
+                                <span>{file.content.length.toLocaleString()} chars</span>
+                              </>
+                            )}
+                            {file.error && (
+                              <>
+                                <span>∙</span>
+                                <span className="text-destructive">{file.error}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-8 text-muted-foreground/80 hover:bg-transparent hover:text-foreground"
+                          onClick={() => {
+                            removeFile(file.id)
+                            setProcessedFiles((prev) => prev.filter((f) => f.id !== file.id))
+                          }}
+                          aria-label="Remove file"
+                        >
+                          <X className="size-4" aria-hidden="true" />
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Stats */}
+            {stats.fileCount > 0 && (
+              <Card className="bg-muted/30 border-border">
+                <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-2xl font-bold">{stats.fileCount}</p>
+                    <p className="text-xs text-muted-foreground">Files Processed</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.totalChars.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Total Characters</p>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* Info Card */}
+            {processedFiles.length === 0 && (
+              <Card className="bg-muted/30 border-border p-6">
+                <div className="space-y-2">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Code className="size-4" />
+                    {getTabInfo().title}
+                  </h3>
+                  <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                    {getTabInfo().items.map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="header" className="space-y-6 mt-6">
+            {/* Upload Area */}
+            <div
+              role="button"
+              onClick={openFileDialog}
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              data-dragging={isDragging || undefined}
+              className="flex min-h-40 flex-col items-center justify-center rounded-xl border-2 border-dashed border-input p-4 transition-colors hover:bg-accent/50 has-disabled:pointer-events-none has-disabled:opacity-50 has-[input:focus]:border-ring has-[input:focus]:ring-[3px] has-[input:focus]:ring-ring/50 data-[dragging=true]:bg-accent/50 cursor-pointer"
+            >
+              <input {...getInputProps()} className="sr-only" aria-label="Upload files" />
+
+              <div className="flex flex-col items-center justify-center text-center">
+                <div
+                  className="mb-2 flex size-11 shrink-0 items-center justify-center rounded-full border bg-background"
+                  aria-hidden="true"
+                >
+                  <Upload className="size-4 opacity-60" />
+                </div>
+                <p className="mb-1.5 text-sm font-medium">Upload EML files</p>
+                <p className="mb-2 text-xs text-muted-foreground">Drag & drop or click to browse</p>
+                <div className="flex flex-wrap justify-center gap-1 text-xs text-muted-foreground/70">
+                  <span>.eml files only</span>
+                  <span>∙</span>
+                  <span>Max {maxFiles} files</span>
+                  <span>∙</span>
+                  <span>Up to {formatBytes(maxSize)} per file</span>
+                </div>
+              </div>
+            </div>
+
+            {errors.length > 0 && (
+              <div className="flex items-center gap-1 text-xs text-destructive" role="alert">
+                <AlertCircle className="size-3 shrink-0" />
+                <span>{errors[0]}</span>
+              </div>
+            )}
+
+            {/* File List */}
+            {processedFiles.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Processed Files ({processedFiles.length})</h2>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={handleDownloadCombined}
+                      disabled={stats.fileCount === 0 || isProcessing}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download Combined ({stats.fileCount})
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleClearAll}>
+                      Clear All
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {processedFiles.map((file) => (
+                    <Card key={file.id} className="flex items-center justify-between gap-2 p-4">
+                      <div className="flex items-center gap-3 overflow-hidden flex-1">
+                        <div className="flex aspect-square size-10 shrink-0 items-center justify-center rounded border">
+                          {getStatusIcon(file.status)}
+                        </div>
+                        <div className="flex min-w-0 flex-col gap-0.5 flex-1">
+                          <p className="truncate text-[13px] font-medium">{file.name}.eml</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{formatBytes(file.size)}</span>
+                            {file.status === "completed" && (
+                              <>
+                                <span>∙</span>
+                                <span>{file.content.length.toLocaleString()} chars</span>
+                              </>
+                            )}
+                            {file.error && (
+                              <>
+                                <span>∙</span>
+                                <span className="text-destructive">{file.error}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-8 text-muted-foreground/80 hover:bg-transparent hover:text-foreground"
+                          onClick={() => {
+                            removeFile(file.id)
+                            setProcessedFiles((prev) => prev.filter((f) => f.id !== file.id))
+                          }}
+                          aria-label="Remove file"
+                        >
+                          <X className="size-4" aria-hidden="true" />
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Stats */}
+            {stats.fileCount > 0 && (
+              <Card className="bg-muted/30 border-border">
+                <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-2xl font-bold">{stats.fileCount}</p>
+                    <p className="text-xs text-muted-foreground">Files Processed</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.totalChars.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Total Characters</p>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* Info Card */}
+            {processedFiles.length === 0 && (
+              <Card className="bg-muted/30 border-border p-6">
+                <div className="space-y-2">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <FileCode className="size-4" />
+                    {getTabInfo().title}
+                  </h3>
+                  <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                    {getTabInfo().items.map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )
