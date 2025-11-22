@@ -59,11 +59,17 @@ const GmailDeliverability = () => {
         missing_code_or_state: "OAuth callback error. Please try again.",
         invalid_state: "Security validation failed. Please try again.",
         oauth_error: "OAuth error occurred. Please try again.",
+        oauth_client_deleted: "The OAuth client was deleted or invalid. Please check your Google Cloud Console OAuth configuration and ensure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set correctly.",
+        oauth_access_denied: "Access was denied. Please grant the required permissions.",
+        oauth_invalid_request: "Invalid OAuth request. Please try again.",
+        access_denied: "Access denied. This feature is restricted to authorized users.",
       };
 
-      toast.error(
-        errorMessages[error] || `Error: ${error.replace(/_/g, " ")}`
-      );
+      const errorMessage = errorMessages[error] || `Error: ${error.replace(/_/g, " ")}`;
+      
+      toast.error(errorMessage, {
+        duration: error === "oauth_client_deleted" ? 10000 : 5000, // Longer duration for config errors
+      });
     }
   };
 
@@ -172,6 +178,42 @@ const GmailDeliverability = () => {
           </div>
         </div>
       </div>
+
+      {/* OAuth Configuration Error Alert */}
+      {searchParams.get("error") === "oauth_client_deleted" && (
+        <Alert className="mb-6 border-red-500/50 bg-red-500/10">
+          <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+          <AlertTitle className="text-red-900 dark:text-red-100">
+            OAuth Configuration Error
+          </AlertTitle>
+          <AlertDescription className="mt-2 text-red-800 dark:text-red-200">
+            <p className="mb-2">
+              The OAuth client was deleted or is invalid. This usually means:
+            </p>
+            <ul className="list-disc list-inside space-y-1 mb-2">
+              <li>The OAuth client was deleted in Google Cloud Console</li>
+              <li>The <code className="px-1 py-0.5 bg-red-900/20 rounded">GOOGLE_CLIENT_ID</code> environment variable is incorrect</li>
+              <li>The <code className="px-1 py-0.5 bg-red-900/20 rounded">GOOGLE_CLIENT_SECRET</code> environment variable is incorrect</li>
+              <li>The redirect URI doesn't match what's configured in Google Cloud Console</li>
+            </ul>
+            <p className="mt-2">
+              <strong>To fix this:</strong> Go to{" "}
+              <a 
+                href="https://console.cloud.google.com/apis/credentials" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="underline hover:text-red-100"
+              >
+                Google Cloud Console → APIs & Services → Credentials
+              </a>
+              {" "}and verify your OAuth 2.0 Client ID is active and the redirect URI matches:{" "}
+              <code className="px-1 py-0.5 bg-red-900/20 rounded text-xs">
+                {typeof window !== "undefined" ? `${window.location.origin}/api/gmail/callback` : "/api/gmail/callback"}
+              </code>
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Main Content */}
       {hasAccess ? (
