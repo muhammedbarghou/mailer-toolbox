@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { FileText, Inbox, Network, ImageIcon, Sparkles, PanelsRightBottom, Scissors, Layers, Home, Mail, Search} from "lucide-react"
+import { FileText, Inbox, Network, ImageIcon, Sparkles, PanelsRightBottom, Scissors, Layers, Home, Mail, Search, HelpCircle} from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -144,6 +144,31 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
+
+        {/* Support Section */}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === "/support"}
+                  tooltip="Contact Support"
+                  className={`relative rounded-lg transition-all duration-200 ${
+                    pathname === "/support"
+                      ? "bg-sidebar-primary/20 text-sidebar-primary"
+                      : "hover:bg-sidebar-accent/50 text-sidebar-foreground/80 hover:text-sidebar-foreground"
+                  }`}
+                >
+                  <Link href="/support" className="flex items-center gap-2">
+                    <HelpCircle className="h-4 w-4 shrink-0" />
+                    <span className="flex-1 text-sm">Contact Support</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
 
     </Sidebar>
