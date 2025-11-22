@@ -7,6 +7,7 @@ import CookieConsentBanner from "@/components/cookie-consent-banner"
 import { Analytics } from "@vercel/analytics/next"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { ErrorBoundary } from "@/components/ui/error-boundary"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 const ubuntu = Ubuntu({
   subsets: ["latin"],
@@ -43,6 +44,7 @@ export default function RootLayout({
               {children}
               <Toaster position="bottom-right" />
               <CookieConsentBanner />
+              <SpeedInsights />
               <Analytics />
             </AuthProvider>
           </ErrorBoundary>
