@@ -10,6 +10,24 @@ import { hasGmailDeliverabilityAccess } from "@/lib/gmail/access-control";
  */
 export async function GET(request: NextRequest) {
   try {
+    // Validate OAuth configuration
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+      console.error("Missing OAuth configuration:", {
+        hasClientId: !!clientId,
+        hasClientSecret: !!clientSecret,
+      });
+      return NextResponse.json(
+        { 
+          error: "OAuth configuration error. Please check that GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set in your environment variables.",
+          code: "OAUTH_CONFIG_MISSING"
+        },
+        { status: 500 }
+      );
+    }
+
     const supabase = await createClient();
 
     // Authenticate user

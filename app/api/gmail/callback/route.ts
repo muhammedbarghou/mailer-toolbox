@@ -40,9 +40,21 @@ export async function GET(request: NextRequest) {
 
     // Handle OAuth error
     if (error) {
+      // Map common OAuth errors to user-friendly messages
+      const errorCode = error.toLowerCase();
+      let errorMessage = error;
+      
+      if (errorCode.includes("deleted") || errorCode.includes("invalid_client")) {
+        errorMessage = "oauth_client_deleted";
+      } else if (errorCode.includes("access_denied")) {
+        errorMessage = "oauth_access_denied";
+      } else if (errorCode.includes("invalid_request")) {
+        errorMessage = "oauth_invalid_request";
+      }
+      
       return NextResponse.redirect(
         new URL(
-          `/gmail-deliverability?error=${encodeURIComponent(error)}`,
+          `/gmail-deliverability?error=${encodeURIComponent(errorMessage)}`,
           request.url
         )
       );

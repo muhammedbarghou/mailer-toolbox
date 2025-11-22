@@ -65,8 +65,17 @@ export const exchangeCodeForTokens = async (
 
   if (!response.ok) {
     const error = await response.json();
+    const errorMessage = error.error_description || error.error || "Unknown error";
+    
+    // Provide more specific error messages
+    if (error.error === "invalid_client" || errorMessage.includes("deleted")) {
+      throw new Error(
+        "OAuth client configuration error. The OAuth client may have been deleted or the credentials are invalid. Please check your GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables."
+      );
+    }
+    
     throw new Error(
-      `Failed to exchange code for tokens: ${error.error_description || error.error}`
+      `Failed to exchange code for tokens: ${errorMessage}`
     );
   }
 
