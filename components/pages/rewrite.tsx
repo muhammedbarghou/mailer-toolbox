@@ -31,6 +31,14 @@ const Rewrite = () => {
   const [rewrittenHtml, setRewrittenHtml] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isCached, setIsCached] = useState(false);
+  const [primaryColor, setPrimaryColor] = useState<string>("#1D4ED8");
+
+  const handleChangeColor = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (isLoading) {
+      return;
+    }
+    setPrimaryColor(event.target.value);
+  };
 
   const handleRewrite = async () => {
     if (!htmlInput.trim()) {
@@ -48,7 +56,7 @@ const Rewrite = () => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ html: htmlInput }),
+        body: JSON.stringify({ html: htmlInput, theme: primaryColor }),
       });
 
       if (!response.ok) {
@@ -116,33 +124,74 @@ const Rewrite = () => {
   const outputCharCount = rewrittenHtml.length;
 
   return (
-    <div className="container mx-auto max-w-7xl px-4 py-6 md:py-12 space-y-8 md:space-y-12">
+    <div className="container  mx-auto max-w-7xl px-4 py-6 md:py-12 space-y-8 md:space-y-12">
       {/* Enhanced Header */}
-      <div className="text-center space-y-6">
-        <div className="flex items-center justify-center gap-3">
-          <div className="relative">
-            <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full" />
-            <Sparkles className="relative h-10 w-10 md:h-12 md:w-12 text-primary animate-pulse" />
-          </div>
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight bg-linear-to-r from-foreground via-primary to-foreground bg-clip-text text-transparent">
-            AI Email Rewriter
-          </h1>
-        </div>
-        <p className="text-muted-foreground text-base md:text-lg max-w-3xl mx-auto leading-relaxed">
-          Transform your HTML emails to bypass spam filters and improve
-          deliverability while maintaining your original message and design.
-        </p>
-        <div className="flex items-center justify-center gap-4 pt-2">
-          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
-            <Zap className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium">Powered by Gemini 2.5 Flash</span>
-          </div>
-          {isCached && (
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-green-500/10 border border-green-500/20">
-              <Database className="h-4 w-4 text-green-500" />
-              <span className="text-sm font-medium text-green-600 dark:text-green-400">Cached Result</span>
+      <div className="space-y-6">
+        <div className="text-center space-y-6">
+          <div className="flex items-center justify-center gap-3">
+            <div className="relative">
+              <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full" />
+              <Sparkles className="relative h-10 w-10 md:h-12 md:w-12 text-primary animate-pulse" />
             </div>
-          )}
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight bg-linear-to-r from-foreground via-primary to-foreground bg-clip-text text-transparent">
+              AI Email Rewriter
+            </h1>
+          </div>
+          <p className="text-muted-foreground text-base md:text-lg max-w-3xl mx-auto leading-relaxed">
+            Transform your HTML emails to bypass spam filters and improve
+            deliverability while maintaining your original message and design.
+          </p>
+          <div className="flex flex-col items-center justify-center gap-3 pt-2 md:flex-row md:gap-4">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
+              <Zap className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">
+                Powered by Gemini 2.5 Flash
+              </span>
+            </div>
+            {isCached && (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-green-500/10 border border-green-500/20">
+                <Database className="h-4 w-4 text-green-500" />
+                <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                  Cached Result
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="relative z-20 mx-auto flex w-full max-w-3xl flex-col gap-3 rounded-2xl border border-border/60 bg-muted/40 p-4 shadow-sm backdrop-blur-sm pointer-events-auto">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Primary color</p>
+              <p className="text-xs text-muted-foreground">
+                Choose the main brand color you want the rewritten HTML email to
+                use for buttons, accents, and key highlights. Layout and content
+                semantics are preserved.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground">
+              <span className="hidden md:inline">Hex:</span>
+              <span className="font-semibold text-primary">{primaryColor}</span>
+            </div>
+          </div>
+          <label className="inline-flex w-fit items-center gap-3 rounded-full border border-border/70 bg-background/60 px-3 py-1.5 text-xs">
+            <span className="text-[11px] text-muted-foreground">
+              Pick a color
+            </span>
+            <input
+              type="color"
+              value={primaryColor}
+              onChange={handleChangeColor}
+              aria-label="Choose primary color for rewritten email"
+              className="h-7 w-10 cursor-pointer rounded-md border border-border bg-transparent p-0"
+              disabled={isLoading}
+            />
+          </label>
+          <p className="text-[11px] text-muted-foreground">
+            The AI will adapt buttons, backgrounds, and accents to your chosen
+            primary color while still following all deliverability and
+            accessibility best practices from the rewrite engine.
+          </p>
         </div>
       </div>
 

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cloud Notice</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    /* Basic reset for mobile-friendly rendering */
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #ffffff;
+    }
+
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* Make the main container responsive */
+    .wrapper {
+      padding: 30px 10px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 600px;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #000000;
+    }
+
+    .content-cell {
+      padding: 30px 40px 10px 40px;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #333333;
+    }
+
+    .headline {
+      background-color: #e5f2ff;
+      padding: 14px 20px;
+      font-size: 16px;
+      font-weight: bold;
+      color: #0084ff;
+    }
+
+    .logo-cell {
+      padding: 10px 20px 20px 20px;
+      font-size: 24px;
+      font-weight: bold;
+      color: #0084ff;
+    }
+
+    .footer {
+      padding: 0 40px 30px 40px;
+      font-size: 11px;
+      line-height: 1.6;
+      color: #888888;
+      text-align: center;
+    }
+
+    .btn td {
+      border-radius: 30px;
+      background-color: #0084ff;
+    }
+
+    .btn a {
+      display: inline-block;
+      padding: 12px 30px;
+      font-size: 16px;
+      text-decoration: none;
+      color: #ffffff;
+      border-radius: 30px;
+      white-space: nowrap;
+    }
+
+    /* Mobile tweaks */
+    @media only screen and (max-width: 480px) {
+      .wrapper {
+        padding: 15px 5px !important;
+      }
+
+      .content-cell {
+        padding: 20px 16px 10px 16px !important;
+        font-size: 15px;
+      }
+
+      .logo-cell {
+        font-size: 22px !important;
+      }
+
+      .headline {
+        font-size: 14px !important;
+        padding: 12px 12px !important;
+      }
+
+      .footer {
+        padding: 10px 16px 20px 16px !important;
+      }
+
+      .btn a {
+        display: block !important;
+        width: 100% !important;
+        box-sizing: border-box;
+        text-align: center !important;
+        white-space: normal;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Wrapper -->
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#ffffff;">
+    <tr>
+      <td align="center" class="wrapper">
+        <!-- Main container -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" class="container">
+          <!-- Logo / Brand -->
+          <tr>
+            <td align="center" class="logo-cell">
+              <span style="font-size:26px;">☁</span> Cloud
+            </td>
+          </tr>
+
+          <!-- Blue bar headline -->
+          <tr>
+            <td align="center" class="headline">
+              Your Cloud Data Could Be at Risk
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td class="content-cell">
+              <p style="margin:0 0 16px 0;">Dear user,</p>
+
+              <p style="margin:0 0 18px 0;">
+                Your Cloud backups could have stopped.
+                Photos and personal data could be at risk of being
+                <strong>removed</strong> from cloud.
+              </p>
+
+              <p style="margin:0 0 8px 0;"><strong>What you could lose:</strong></p>
+
+              <ul style="margin:0 0 18px 18px; padding:0;">
+                <li style="margin-bottom:4px;">Photos and videos stored in Cloud Photos</li>
+                <li style="margin-bottom:4px;">Contacts, calendars, and reminders</li>
+                <li style="margin-bottom:4px;">Notes, documents, and app data</li>
+                <li style="margin-bottom:4px;">Device backups (iPhone, iPad, Mac)</li>
+              </ul>
+
+              <p style="margin:0 0 6px 0;">
+                <span style="font-style:italic;">i</span>
+                <strong> Reminder:</strong>
+              </p>
+
+              <p style="margin:0 0 18px 0;">
+                Backups could be at risk if no action is taken by
+                <strong>Today.</strong>
+              </p>
+
+              <p style="margin:0 0 26px 0;">
+                To prevent data loss, please check your storage capacity or upgrade your space to continue
+                enjoying seamless access to your files and photos across all devices.
+              </p>
+
+              <!-- Button -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 30px auto;" class="btn">
+                <tr>
+                  <td align="center">
+                    <a href="#">
+                      Upgrade Storage &amp; Secure My Backups
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0 0 4px 0; text-align:center;">
+                Thank you for choosing Cloud.
+              </p>
+              <p style="margin:0 0 20px 0; text-align:center;">
+                - <strong> Cloud Support </strong>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td class="footer">
+              <p style="margin:0 0 6px 0;">
+                If you don't want to receive this type of message, you can
+                <a href="#" style="color:#0084ff; text-decoration:none;">unsubscribe</a>
+                from this list.
+              </p>
+              <p style="margin:4px 0 0 0;">
+                [ENTER ADDRESS]
+              </p>
+            </td>
+          </tr>
+
+        </table>
+        <!-- /Main container -->
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

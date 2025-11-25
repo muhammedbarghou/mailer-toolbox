@@ -347,7 +347,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { html } = body;
+    const { html, theme } = body;
 
     if (!html || typeof html !== "string") {
       return NextResponse.json(
@@ -356,8 +356,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const themeKey: string =
+      typeof theme === "string" && theme.trim().length > 0
+        ? theme.trim()
+        : "default";
+
     // Generate cache key
-    const cacheKeyInput = `${PROMPT_VERSION}${SYSTEM_PROMPT}${html}`;
+    const cacheKeyInput = `${PROMPT_VERSION}${SYSTEM_PROMPT}${themeKey}${html}`;
     const cacheKeyHash = sha256(cacheKeyInput);
     const cacheKey = `email-rewrite:${PROMPT_VERSION}:${cacheKeyHash}`;
 
@@ -445,6 +450,41 @@ export async function POST(request: NextRequest) {
       apiKey: apiKeyToUse,
     });
 
+    // Build theme-specific styling instructions
+    let themeInstruction = "";
+
+    const isHexColor =
+      themeKey.startsWith("#") &&
+      (themeKey.length === 4 || themeKey.length === 7);
+
+    if (isHexColor) {
+      themeInstruction = `Use ${themeKey} as the primary brand color for the rewritten email. Apply it thoughtfully to buttons, key links, and accent elements, and derive complementary lighter/darker variants as needed. Ensure WCAG-compliant contrast against backgrounds and keep the overall palette clean, professional, and inbox-safe.`;
+    } else if (themeKey === "brand-blue") {
+      themeInstruction =
+        "Apply a modern blue SaaS-style color theme to the rewritten email. Use a deep, accessible blue as the primary color (for example around #1D4ED8) with lighter blue accents and plenty of neutral background space. Ensure strong contrast and a clean, product-focused feel while remaining professional and inbox-safe.";
+    } else if (themeKey === "fresh-green") {
+      themeInstruction =
+        "Apply a fresh green color theme to the rewritten email. Use an accessible emerald or teal-like primary color (for example around #059669) with subtle neutrals. The overall feel should be optimistic, growth-oriented, and suitable for lifecycle, onboarding, or progress-update emails.";
+    } else if (themeKey === "deep-purple") {
+      themeInstruction =
+        "Apply a deep purple color theme to the rewritten email. Use a rich, saturated purple primary (for example around #7C3AED) with complementary subtle accent colors. The design should feel premium and creative while still remaining highly legible and compliant with accessibility and deliverability best practices.";
+    } else if (themeKey === "warm-amber") {
+      themeInstruction =
+        "Apply a warm amber or orange-toned color theme to the rewritten email. Use a warm, friendly amber primary (for example around #F59E0B) and soft supporting neutrals. The layout should feel welcoming and editorial, ideal for newsletters or community announcements, while preserving strong contrast.";
+    } else if (themeKey === "neutral-slate") {
+      themeInstruction =
+        "Apply a neutral slate and gray color theme to the rewritten email. Use subtle, content-first neutrals (for example multiple shades around #111827 to #E5E7EB) and very minimal accent colors. The email should feel highly professional and minimal, ideal for transactional or system notifications.";
+    } else {
+      themeInstruction =
+        "Apply a cohesive, accessible color palette that feels professional and modern. You may adjust colors from the original HTML as needed to improve readability and deliverability.";
+    }
+
+    const finalPrompt = `${themeInstruction}
+
+Here is the original HTML email that must be rewritten according to the full system instructions above and the selected color theme. Preserve the logical structure and meaning, but fully rewrite the implementation:
+
+${html}`;
+
     // Call Google Gemini API with retry logic for rate limits
     let result;
     const maxRetries = 3;
@@ -455,7 +495,7 @@ export async function POST(request: NextRequest) {
         result = await generateText({
           model: googleProvider("gemini-2.5-flash"),
           system: SYSTEM_PROMPT,
-          prompt: html,
+          prompt: finalPrompt,
           temperature: 0.7,
         });
         // Success - break out of retry loop

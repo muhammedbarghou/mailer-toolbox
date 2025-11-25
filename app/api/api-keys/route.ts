@@ -24,8 +24,11 @@ export async function GET(request: NextRequest) {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
+        {
+          error:
+            "Authentication required. Please sign in to view and manage your API keys.",
+        },
+        { status: 401 },
       );
     }
 
@@ -78,8 +81,11 @@ export async function POST(request: NextRequest) {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
+        {
+          error:
+            "Authentication required. Please sign in to add or update your API keys.",
+        },
+        { status: 401 },
       );
     }
 
