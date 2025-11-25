@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
-import { buttonVariants, Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import Image from "next/image"
 import Link from "next/link"
 import gsap from "gsap"
@@ -10,7 +10,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger"
 import { useAuth } from "@/contexts/AuthContext"
 import { useRouter } from "next/navigation"
 import { GridPattern } from "@/components/ui/shadcn-io/grid-pattern"
-import { Sparkles, Inbox, Zap, ArrowRight, CheckCircle2 } from "lucide-react"
+import { Sparkles, Inbox, Zap, Shield, UserCheck } from "lucide-react"
 
 
 const Home = () => {
@@ -411,6 +411,75 @@ const Home = () => {
                   <p className="text-sm text-muted-foreground">
                     Complete email toolkit: rewriting, conversion, header processing, and more.
                   </p>
+                </div>
+              </div>
+            </div>
+
+            {/* About & Data Use Section for Google Verification */}
+            <div className="mt-20 w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-10 text-left">
+              {/* About the app */}
+              <div className="bg-background/60 backdrop-blur-xl rounded-xl border border-border/60 p-6 md:p-8 shadow-sm">
+                <h2 className="flex items-center gap-2 text-xl md:text-2xl font-semibold mb-4">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  <span>About Mailer Toolkit</span>
+                </h2>
+                <p className="text-muted-foreground text-sm md:text-base leading-relaxed mb-3">
+                  Mailer Toolkit is an all-in-one suite of professional email and IP tools designed for marketers, developers,
+                  and deliverability specialists. It helps you rewrite email bodies and subject lines, process headers, extract
+                  text from EML files, convert HTML to images, compare IP lists, and more.
+                </p>
+                <p className="text-muted-foreground text-sm md:text-base leading-relaxed">
+                  The platform focuses on testing, analyzing, and optimizing your email content and infrastructure. It does not
+                  send bulk email itself and is intended to help you improve compliance and deliverability across your own
+                  systems and providers.
+                </p>
+              </div>
+
+              {/* Data & Google usage */}
+              <div className="bg-background/60 backdrop-blur-xl rounded-xl border border-border/60 p-6 md:p-8 shadow-sm flex flex-col gap-4">
+                <div>
+                  <h2 className="flex items-center gap-2 text-xl md:text-2xl font-semibold mb-2">
+                    <Shield className="h-5 w-5 text-primary" />
+                    <span>How We Use Your Data</span>
+                  </h2>
+                  <p className="text-muted-foreground text-sm md:text-base leading-relaxed mb-3">
+                    We only use the content, files, and IP lists you provide to run the selected tools and return results to you.
+                    Uploaded data and processing output are not sold or shared for advertising.
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-muted-foreground text-sm md:text-base">
+                    <li>Data you upload (emails, EML files, headers, images, IPs) is processed only to generate tool outputs.</li>
+                    <li>We do not use your content or Google data to build advertising profiles or for unrelated purposes.</li>
+                    <li>Processing data is retained only as long as necessary to provide results, then discarded.</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="flex items-center gap-2 text-base md:text-lg font-semibold mb-2">
+                    <UserCheck className="h-5 w-5 text-primary" />
+                    <span>Google &amp; Gmail Data</span>
+                  </h3>
+                  <p className="text-muted-foreground text-sm md:text-base leading-relaxed mb-3">
+                    When you connect your Google account, Mailer Toolkit only accesses the minimum Gmail data needed to perform
+                    actions you request (such as searching or analyzing messages for deliverability). We comply with the Google
+                    API Services User Data Policy, including the Limited Use requirements.
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-muted-foreground text-sm md:text-base mb-3">
+                    <li>Google data is not used to serve ads or sold to third parties.</li>
+                    <li>Google data is not used to train generalized AI models.</li>
+                    <li>You can disconnect access at any time through your Google Account and within our app.</li>
+                  </ul>
+                </div>
+
+                <div className="mt-1 flex flex-col gap-2">
+                  <p className="text-muted-foreground text-xs md:text-sm">
+                    For full details on how we collect, use, and protect data (including Google user data), please review our
+                    Privacy Policy.
+                  </p>
+                  <Button asChild variant="outline" className="self-start text-xs md:text-sm">
+                    <Link href="/privacy">
+                      View Privacy Policy
+                    </Link>
+                  </Button>
                 </div>
               </div>
             </div>

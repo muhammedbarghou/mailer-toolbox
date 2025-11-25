@@ -20,7 +20,7 @@ const PrivacyPolicy = () => {
         {/* Introduction */}
         <Card className="p-6 mb-6">
           <p className="text-foreground leading-relaxed">
-            This Privacy Policy describes how Mailer Toolkit ("we", "us", "our") collects, uses, and protects your information.
+            This Privacy Policy describes how Mailer Toolbox ("we", "us", "our") collects, uses, and protects your information.
           </p>
           <p className="text-foreground leading-relaxed mt-4">
             By using the Service, you agree to this Policy.

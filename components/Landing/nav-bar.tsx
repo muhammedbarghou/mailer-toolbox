@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import Logo from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import { ModeToggle } from "@/components/mode-toggle"
 import Image from "next/image"
