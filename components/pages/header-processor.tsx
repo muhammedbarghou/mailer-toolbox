@@ -22,6 +22,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import JSZip from "jszip"
 
 interface FileItem {
   id: string
@@ -398,11 +399,6 @@ const EmailHeaderProcessor = () => {
         return
       }
 
-      if (files.length + fileArray.length > 20) {
-        alert("Maximum 20 files allowed")
-        return
-      }
-
       const newFiles: FileItem[] = []
 
       for (const file of fileArray) {
@@ -474,25 +470,31 @@ const EmailHeaderProcessor = () => {
       return
     }
 
-    for (let i = 0; i < completedFiles.length; i++) {
-      const file = completedFiles[i]
-      const blob = new Blob([file.processedContent], { type: "text/plain" })
-      const url = URL.createObjectURL(blob)
+    try {
+      const zip = new JSZip()
+
+      // Add all processed files to the zip
+      completedFiles.forEach((file) => {
+        const baseName = file.name.substring(0, file.name.lastIndexOf(".")) || file.name
+        const fileName = `processed-${baseName}.txt`
+        zip.file(fileName, file.processedContent)
+      })
+
+      // Generate the zip file
+      const zipBlob = await zip.generateAsync({ type: "blob" })
+      
+      // Create download link
+      const url = URL.createObjectURL(zipBlob)
       const a = document.createElement("a")
       a.href = url
-      // Extract file extension and replace with .txt
-      const fileExtension = file.name.substring(file.name.lastIndexOf("."))
-      const baseName = file.name.substring(0, file.name.lastIndexOf(".")) || file.name
-      a.download = `processed-${baseName}.txt`
+      a.download = `processed-headers-${Date.now()}.zip`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      
-      // Add 500ms delay between downloads (except for the last one)
-      if (i < completedFiles.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500))
-      }
+    } catch (error) {
+      console.error("Failed to create zip file:", error)
+      alert("Failed to create zip file. Please try again.")
     }
   }, [files])
 
@@ -599,7 +601,7 @@ const EmailHeaderProcessor = () => {
             </div>
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-foreground">Email Header Processor - Batch Mode</h1>
-              <p className="text-sm text-muted-foreground mt-1">Process up to 20 text-based files at once (.eml, .txt, etc.)</p>
+              <p className="text-sm text-muted-foreground mt-1">Process unlimited text-based files at once (.eml, .txt, etc.)</p>
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={() => setShowSettings(!showSettings)} className="gap-2">
@@ -785,7 +787,7 @@ const EmailHeaderProcessor = () => {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
                 <FolderOpen size={20} />
-                Files ({files.length}/20)
+                Files ({files.length})
               </h2>
               <div className="flex gap-2">
                 <label className="cursor-pointer">
@@ -821,7 +823,7 @@ const EmailHeaderProcessor = () => {
               <p className="text-sm text-foreground font-medium mb-1">Drop text files here</p>
               <p className="text-xs text-muted-foreground">(.eml, .txt, .text, .msg, .email)</p>
               <p className="text-xs text-muted-foreground mt-1">or click the upload button above</p>
-              <p className="text-xs text-muted-foreground mt-2">Maximum 20 files</p>
+              <p className="text-xs text-muted-foreground mt-2">Upload as many files as you want</p>
             </div>
 
             <div className="space-y-2 max-h-[500px] overflow-y-auto">
@@ -904,7 +906,7 @@ const EmailHeaderProcessor = () => {
                   className="w-full gap-2 bg-transparent"
                 >
                   <Download size={16} />
-                  Download All ({stats.completed})
+                  Download All as ZIP ({stats.completed})
                 </Button>
               </div>
             )}
