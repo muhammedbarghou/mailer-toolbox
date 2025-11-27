@@ -10,7 +10,6 @@ import {
   Download,
   Upload,
   RefreshCw,
-  Settings,
   FileText,
   Trash2,
   Zap,
@@ -32,126 +31,44 @@ interface FileItem {
   status: "pending" | "processing" | "completed" | "error"
 }
 
-const PRESETS = {
-  standard: {
-    name: "Standard",
-    description: "Remove common tracking and authentication headers",
-    fieldsToRemove: {
-      "Delivered-To:": true,
-      "Received: by": true,
-      "X-Google-Smtp-Source:": true,
-      "X-Received:": true,
-      "X-original-To": true,
-      "ARC-Seal:": true,
-      "ARC-Message-Signature:": true,
-      "ARC-Authentication-Results:": true,
-      "Return-Path:": true,
-      "Received-SPF:": true,
-      References: true,
-      "Authentication-Results:": true,
-      "DKIM-Signature:": true,
-      "X-SG-EID:": true,
-      "Cc:": false,
-      "X-Entity-ID:": true,
-    },
-    fieldsToAdd: {
-      "List-Unsubscribe:": true,
-      "List-Unsubscribe-Post:": true,
-    },
-    fieldsToModify: {
-      "To:": true,
-      "Date:": true,
-    },
-  },
-  minimal: {
-    name: "Minimal",
-    description: "Keep only essential headers",
-    fieldsToRemove: {
-      "Delivered-To:": true,
-      "Received: by": true,
-      "X-Google-Smtp-Source:": true,
-      "X-Received:": true,
-      "X-original-To": true,
-      "ARC-Seal:": true,
-      "ARC-Message-Signature:": true,
-      "ARC-Authentication-Results:": true,
-      "Return-Path:": true,
-      "Received-SPF:": true,
-      References: true,
-      "Authentication-Results:": true,
-      "DKIM-Signature:": true,
-      "X-SG-EID:": true,
-      "Cc:": true,
-      "X-Entity-ID:": true,
-    },
-    fieldsToAdd: {
-      "List-Unsubscribe:": false,
-      "List-Unsubscribe-Post:": false,
-    },
-    fieldsToModify: {
-      "To:": false,
-      "Date:": false,
-    },
-  },
-  custom: {
-    name: "Custom",
-    description: "Configure your own settings",
-    fieldsToRemove: {},
-    fieldsToAdd: {
-      "List-Unsubscribe:": true,
-      "List-Unsubscribe-Post:": true,
-    },
-    fieldsToModify: {
-      "To:": true,
-      "Date:": true,
-    },
-  },
-}
-
-const AVAILABLE_HEADERS_TO_ADD = {
-  "List-Unsubscribe:": {
-    label: "List-Unsubscribe",
-    description: "Add unsubscribe header for email compliance",
-    value: "List-Unsubscribe: <mailto:unsubscribe@[P_RPATH]>, <http://[P_RPATH]/[OPTDOWN]>",
-  },
-  "List-Unsubscribe-Post:": {
-    label: "List-Unsubscribe-Post",
-    description: "Add one-click unsubscribe support",
-    value: "List-Unsubscribe-Post: List-Unsubscribe=One-Click",
-  },
-}
-
-function processEmail(input: string, config: any): string {
+function processEmail(input: string): string {
   const lines = input.split("\n")
   const outputLines: string[] = []
   let inHeader = true
   let boundary = ""
   let currentHeader: string[] = []
-  let hasListUnsubscribe = false
 
   const contentTypeMatch = input.match(/boundary=["']?([^"'\s]+)["']?/i)
   if (contentTypeMatch) {
     boundary = contentTypeMatch[1]
   }
 
+  // Headers to remove: DKIM, SPF, ARC, Return-Path, and delivery params
   const fieldsToRemove = [
-    "Delivered-To:",
-    "Received: by",
-    "X-Google-Smtp-Source:",
-    "X-Received:",
-    "X-original-To",
+    "DKIM-Signature:",
+    "Received-SPF:",
+    "Authentication-Results:",
     "ARC-Seal:",
     "ARC-Message-Signature:",
     "ARC-Authentication-Results:",
     "Return-Path:",
-    "Received-SPF:",
-    "References",
-    "Authentication-Results:",
-    "DKIM-Signature:",
-    "X-SG-EID:",
-    "Cc:",
-    "X-Entity-ID:",
-  ].filter((field) => config.fieldsToRemove[field])
+    "Delivered-To:",
+    "Received: by",
+    "X-Received:",
+    "X-original-To",
+  ]
+
+  // Headers to skip (will be replaced with new ones)
+  const headersToSkip = [
+    "List-Unsubscribe:",
+    "List-Unsubscribe-Post:",
+    "References:",
+    "Feedback-ID:",
+    "X-Mailer:",
+    "Priority:",
+    "Importance:",
+    "Sensitivity:",
+  ]
 
   for (let i = 0; i < lines.length; i++) {
     const rawLine = lines[i]
@@ -170,7 +87,21 @@ function processEmail(input: string, config: any): string {
     }
 
     if (inHeader) {
-      if (fieldsToRemove.some((field) => line.startsWith(field))) {
+      // Skip headers that should be removed (including continuation lines)
+      if (fieldsToRemove.some((field) => line.toLowerCase().startsWith(field.toLowerCase()))) {
+        // Skip continuation lines
+        while (i + 1 < lines.length && (lines[i + 1].startsWith("\t") || lines[i + 1].startsWith(" "))) {
+          i++
+        }
+        continue
+      }
+
+      // Skip headers that will be replaced (including continuation lines)
+      if (headersToSkip.some((field) => line.toLowerCase().startsWith(field.toLowerCase()))) {
+        // Skip continuation lines
+        while (i + 1 < lines.length && (lines[i + 1].startsWith("\t") || lines[i + 1].startsWith(" "))) {
+          i++
+        }
         continue
       }
 
@@ -184,27 +115,13 @@ function processEmail(input: string, config: any): string {
           i++
           currentHeader.push(lines[i].trimEnd())
         }
-      } else if (line.startsWith("Date:")) {
-        if (currentHeader.length > 0) {
-          outputLines.push(...currentHeader)
-          currentHeader = []
-        }
-        if (config.fieldsToModify["Date:"]) {
-          outputLines.push("Date: [D=>%a, %d %b %Y %H:%M:%S] +0000")
-        } else {
-          outputLines.push(line)
-        }
       } else if (line.startsWith("To:")) {
         if (currentHeader.length > 0) {
           outputLines.push(...currentHeader)
           currentHeader = []
         }
-        if (config.fieldsToModify["To:"]) {
-          outputLines.push("To: [*to]")
-          outputLines.push("Cc: [*to]")
-        } else {
-          outputLines.push(line)
-        }
+        // Always modify To: to [*to]
+        outputLines.push("To: [*to]")
       } else if (line.startsWith("From:")) {
         if (currentHeader.length > 0) {
           outputLines.push(...currentHeader)
@@ -267,18 +184,6 @@ function processEmail(input: string, config: any): string {
 
         const newMsgId = `<${localPart}@${domain}>`
         outputLines.push(`Message-ID: ${newMsgId}`)
-      } else if (line.startsWith("List-Unsubscribe:")) {
-        if (currentHeader.length > 0) {
-          outputLines.push(...currentHeader)
-          currentHeader = []
-        }
-        if (config.fieldsToAdd["List-Unsubscribe:"]) {
-          outputLines.push("List-Unsubscribe: <mailto:unsubscribe@[P_RPATH]>, <http://[P_RPATH]/[OPTDOWN]>")
-          hasListUnsubscribe = true
-        } else {
-          // Skip existing List-Unsubscribe if not configured to add
-          hasListUnsubscribe = false
-        }
       } else if (line.startsWith("Content-Type:")) {
         if (currentHeader.length > 0) {
           outputLines.push(...currentHeader)
@@ -289,38 +194,20 @@ function processEmail(input: string, config: any): string {
           i++
           outputLines.push(lines[i].trimEnd())
         }
-      } else if (line.startsWith("MIME-Version:")) {
-        if (currentHeader.length > 0) {
-          outputLines.push(...currentHeader)
-          currentHeader = []
-        }
-        outputLines.push(line)
-      } else if (line.startsWith("Subject:")) {
-        if (currentHeader.length > 0) {
-          outputLines.push(...currentHeader)
-          currentHeader = []
-        }
-        outputLines.push(line)
-      } else if (line.startsWith("List-Unsubscribe-Post:")) {
-        if (currentHeader.length > 0) {
-          outputLines.push(...currentHeader)
-          currentHeader = []
-        }
-        // Only keep if configured to add
-        if (config.fieldsToAdd["List-Unsubscribe-Post:"]) {
-          outputLines.push(line)
-        }
       } else if (
+        line.startsWith("MIME-Version:") ||
+        line.startsWith("Subject:") ||
+        line.startsWith("Date:") ||
         line.startsWith("Reply-To:") ||
-        line.startsWith("Feedback-ID:") ||
-        line.startsWith("X-SES-Outgoing:")
+        line.startsWith("Content-Transfer-Encoding:")
       ) {
         if (currentHeader.length > 0) {
           outputLines.push(...currentHeader)
           currentHeader = []
         }
         outputLines.push(line)
-      } else if (line.startsWith("Content-Transfer-Encoding:")) {
+      } else if (!line.startsWith("Cc:")) {
+        // Keep other headers except Cc (which we skip)
         if (currentHeader.length > 0) {
           outputLines.push(...currentHeader)
           currentHeader = []
@@ -336,32 +223,24 @@ function processEmail(input: string, config: any): string {
     outputLines.push(...currentHeader)
   }
 
-  // Add headers based on configuration
+  // Find insertion point after From: header
   const fromIndex = outputLines.findIndex((line) => line.startsWith("From:"))
+  const insertIndex = fromIndex !== -1 ? fromIndex + 1 : outputLines.findIndex((line) => line === "") !== -1 ? outputLines.findIndex((line) => line === "") : outputLines.length
 
-  if (config.fieldsToAdd["List-Unsubscribe:"] && !hasListUnsubscribe) {
-    const senderIndex = outputLines.findIndex((line) => line.startsWith("Sender:"))
-    const insertIndex = senderIndex !== -1 ? senderIndex + 1 : fromIndex !== -1 ? fromIndex + 1 : outputLines.length
-    
-    const headersToInsert: string[] = []
-    if (config.fieldsToAdd["List-Unsubscribe:"]) {
-      headersToInsert.push("List-Unsubscribe: <mailto:unsubscribe@[P_RPATH]>, <http://[P_RPATH]/[OPTDOWN]>")
-    }
-    if (config.fieldsToAdd["List-Unsubscribe-Post:"]) {
-      headersToInsert.push("List-Unsubscribe-Post: List-Unsubscribe=One-Click")
-    }
-    
-    if (headersToInsert.length > 0) {
-      outputLines.splice(insertIndex, 0, ...headersToInsert)
-    }
-  } else if (hasListUnsubscribe && config.fieldsToAdd["List-Unsubscribe-Post:"]) {
-    const listUnsubIndex = outputLines.findIndex((line) => line.startsWith("List-Unsubscribe:"))
-    if (listUnsubIndex !== -1) {
-      const postIndex = outputLines.findIndex((line, idx) => idx > listUnsubIndex && line.startsWith("List-Unsubscribe-Post:"))
-      if (postIndex === -1) {
-        outputLines.splice(listUnsubIndex + 1, 0, "List-Unsubscribe-Post: List-Unsubscribe=One-Click")
-      }
-    }
+  // Add required headers
+  const headersToInsert: string[] = [
+    "List-Unsubscribe: <mailto:unsubscribe@[P_RPATH]>, <http://[P_RPATH]/unsubscribe?email=abuse@[P_RPATH]>",
+    "List-Unsubscribe-Post: List-Unsubscribe=One-Click",
+    "References: <mnidm.3579.2787.34094.1486337610._@mn1.byway.it> <CANMFzQMn+UR8uM9bUq5Y8j7Pdm0EgXhBtXK76BUOBW3hLEr2_A@mail.gmail.com>",
+    "Feedback-ID: ::1.us-east-1.1nRXWOT+ETvogqnAUaOa7HjKGx1p40xVES7T8DfH/Gc=:AmazonSES",
+    "X-Mailer: Microsoft CDO for Windows 2000",
+    "Priority: urgent",
+    "Importance: High",
+    "Sensitivity: Private",
+  ]
+
+  if (insertIndex !== -1) {
+    outputLines.splice(insertIndex, 0, ...headersToInsert)
   }
 
   return outputLines.join("\n")
@@ -370,14 +249,7 @@ function processEmail(input: string, config: any): string {
 const EmailHeaderProcessor = () => {
   const [files, setFiles] = useState<FileItem[]>([])
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
-  const [showSettings, setShowSettings] = useState(false)
   const [dragActive, setDragActive] = useState(false)
-  const [selectedPreset, setSelectedPreset] = useState<keyof typeof PRESETS>("standard")
-  const [config, setConfig] = useState({
-    ...PRESETS.standard,
-    fieldsToAdd: { ...PRESETS.standard.fieldsToAdd },
-    fieldsToModify: { ...PRESETS.standard.fieldsToModify },
-  })
   const [processing, setProcessing] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -449,7 +321,7 @@ const EmailHeaderProcessor = () => {
       await new Promise((resolve) => setTimeout(resolve, 50))
 
       try {
-        const processed = processEmail(updatedFiles[i].originalContent, config)
+        const processed = processEmail(updatedFiles[i].originalContent)
         updatedFiles[i].processedContent = processed
         updatedFiles[i].status = "completed"
       } catch (err) {
@@ -460,7 +332,7 @@ const EmailHeaderProcessor = () => {
     }
 
     setProcessing(false)
-  }, [files, config])
+  }, [files])
 
   const handleDownloadAll = useCallback(async () => {
     const completedFiles = files.filter((f) => f.status === "completed")
@@ -560,16 +432,6 @@ const EmailHeaderProcessor = () => {
     [handleFilesUpload],
   )
 
-  const handlePresetChange = useCallback((preset: keyof typeof PRESETS) => {
-    setSelectedPreset(preset)
-    const presetConfig = PRESETS[preset]
-    setConfig({
-      ...presetConfig,
-      fieldsToRemove: preset === "custom" ? {} : { ...presetConfig.fieldsToRemove },
-      fieldsToAdd: { ...presetConfig.fieldsToAdd },
-      fieldsToModify: { ...presetConfig.fieldsToModify },
-    } as any)
-  }, [])
 
   const copyToClipboard = useCallback(async (text: string) => {
     try {
@@ -604,148 +466,7 @@ const EmailHeaderProcessor = () => {
               <p className="text-sm text-muted-foreground mt-1">Process unlimited text-based files at once (.eml, .txt, etc.)</p>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => setShowSettings(!showSettings)} className="gap-2">
-            <Settings size={16} />
-            <span className="hidden sm:inline">Settings</span>
-          </Button>
         </div>
-
-        {showSettings && (
-          <Card className="mb-6 p-6 border-border">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-foreground">Processing Configuration</h3>
-              <Button variant="ghost" size="sm" onClick={() => setShowSettings(false)}>
-                <X size={16} />
-              </Button>
-            </div>
-
-            <div className="mb-6">
-              <label className="text-sm font-medium text-foreground mb-2 block">Presets</label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {Object.entries(PRESETS).map(([key, preset]) => (
-                  <button
-                    key={key}
-                    onClick={() => handlePresetChange(key as keyof typeof PRESETS)}
-                    className={`p-4 rounded-lg border text-left transition-all ${
-                      selectedPreset === key
-                        ? "border-primary bg-accent"
-                        : "border-border hover:border-muted-foreground"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <Zap size={16} className={selectedPreset === key ? "text-primary" : "text-muted-foreground"} />
-                      <span className="font-semibold text-sm">{preset.name}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">{preset.description}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <label className="text-sm font-medium text-foreground mb-3 block">Headers to Add</label>
-              <div className="space-y-3">
-                {Object.entries(AVAILABLE_HEADERS_TO_ADD).map(([key, header]) => (
-                  <label
-                    key={key}
-                    className="flex items-start gap-3 text-sm text-foreground cursor-pointer p-3 rounded-lg border border-border hover:bg-accent transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={config.fieldsToAdd[key as keyof typeof config.fieldsToAdd] || false}
-                      onChange={(e) =>
-                        setConfig({
-                          ...config,
-                          fieldsToAdd: { ...config.fieldsToAdd, [key]: e.target.checked },
-                        })
-                      }
-                      className="rounded mt-1"
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium">{header.label}</div>
-                      <div className="text-xs text-muted-foreground mt-1">{header.description}</div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <label className="text-sm font-medium text-foreground mb-3 block">Fields to Modify</label>
-              <div className="space-y-3">
-                <label className="flex items-start gap-3 text-sm text-foreground cursor-pointer p-3 rounded-lg border border-border hover:bg-accent transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={config.fieldsToModify["To:"] || false}
-                    onChange={(e) =>
-                      setConfig({
-                        ...config,
-                        fieldsToModify: { ...config.fieldsToModify, "To:": e.target.checked },
-                      })
-                    }
-                    className="rounded mt-1"
-                  />
-                  <div className="flex-1">
-                    <div className="font-medium">To: Field</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {config.fieldsToModify["To:"]
-                        ? "Will be changed to: To: [*to]"
-                        : "Will keep the original To: value"}
-                    </div>
-                  </div>
-                </label>
-                <label className="flex items-start gap-3 text-sm text-foreground cursor-pointer p-3 rounded-lg border border-border hover:bg-accent transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={config.fieldsToModify["Date:"] || false}
-                    onChange={(e) =>
-                      setConfig({
-                        ...config,
-                        fieldsToModify: { ...config.fieldsToModify, "Date:": e.target.checked },
-                      })
-                    }
-                    className="rounded mt-1"
-                  />
-                  <div className="flex-1">
-                    <div className="font-medium">Date: Field</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {config.fieldsToModify["Date:"]
-                        ? "Will be changed to: Date: [D=>%a, %d %b %Y %H:%M:%S] +0000"
-                        : "Will keep the original Date: value"}
-                    </div>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            {selectedPreset === "custom" && (
-              <div>
-                <label className="text-sm font-medium text-foreground mb-3 block">Fields to Remove</label>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {Object.keys(PRESETS.standard.fieldsToRemove).map((field) => (
-                    <label
-                      key={field}
-                      className="flex items-center gap-2 text-sm text-foreground cursor-pointer p-2 rounded hover:bg-accent"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={config.fieldsToRemove[field as keyof typeof config.fieldsToRemove]}
-                        onChange={(e) =>
-                          setConfig({
-                            ...config,
-                            fieldsToRemove: { ...config.fieldsToRemove, [field]: e.target.checked },
-                          })
-                        }
-                        className="rounded"
-                      />
-                      <span className="text-xs">{field}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-          </Card>
-        )}
 
         {files.length > 0 && (
           <Card className="mb-4 p-4 border-border">
