@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { FileText, Inbox, Network, ImageIcon, Sparkles, PanelsRightBottom, Scissors, Layers, Home, Mail, Search, HelpCircle} from "lucide-react"
+import { FileText, Inbox, Network, ImageIcon, Sparkles, PanelsRightBottom, Scissors, Layers, Home, Mail, Search, HelpCircle, ShieldAlert } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -69,6 +69,11 @@ const toolCategories = [
         href: "/ip-comparator",
         title: "IP Comparator",
         icon: Network,
+      },
+      {
+        href: "/ip-reputation",
+        title: "IP Reputation Checker",
+        icon: ShieldAlert,
       },
       {
         href: "/photo-editor",
