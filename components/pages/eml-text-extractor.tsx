@@ -13,6 +13,7 @@ type TabType = "text" | "html" | "header"
 interface ProcessedFile {
   id: string
   name: string
+  extension: string
   content: string
   size: number
   status: "pending" | "processing" | "completed" | "error"
@@ -302,7 +303,7 @@ const EmlTextExtractor = () => {
     multiple: true,
     maxFiles,
     maxSize,
-    accept: ".eml,message/rfc822",
+    accept: ".eml,.txt,message/rfc822",
     onFilesChange: (newFiles) => {
       processFiles(newFiles, activeTab)
     },
@@ -320,9 +321,11 @@ const EmlTextExtractor = () => {
         const file = fileWrapper.file instanceof File ? fileWrapper.file : null
         if (!file) continue
 
+        const fileExtension = file.name.match(/\.(eml|txt)$/i)?.[0] || ".eml"
         const processedFile: ProcessedFile = {
           id: fileWrapper.id,
-          name: file.name.replace(/\.eml$/i, ""),
+          name: file.name.replace(/\.(eml|txt)$/i, ""),
+          extension: fileExtension,
           content: "",
           size: file.size,
           status: "processing",
@@ -424,7 +427,7 @@ const EmlTextExtractor = () => {
         break
       case "html":
         combinedContent = completedFiles.map((file) => file.content.trim()).join("\n\n<!-- __SEP__ -->\n\n")
-        fileExtension = "html"
+        fileExtension = "txt"
         mimeType = "text/html;charset=utf-8"
         break
       case "header":
@@ -582,7 +585,7 @@ const EmlTextExtractor = () => {
                 <p className="mb-1.5 text-sm font-medium">Upload EML files</p>
                 <p className="mb-2 text-xs text-muted-foreground">Drag & drop or click to browse</p>
                 <div className="flex flex-wrap justify-center gap-1 text-xs text-muted-foreground/70">
-                  <span>.eml files only</span>
+                  <span>.eml and .txt files</span>
                   <span>∙</span>
                   <span>Max {maxFiles} files</span>
                   <span>∙</span>
@@ -627,7 +630,7 @@ const EmlTextExtractor = () => {
                           {getStatusIcon(file.status)}
                         </div>
                         <div className="flex min-w-0 flex-col gap-0.5 flex-1">
-                          <p className="truncate text-[13px] font-medium">{file.name}.eml</p>
+                          <p className="truncate text-[13px] font-medium">{file.name}{file.extension}</p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span>{formatBytes(file.size)}</span>
                             {file.status === "completed" && (
@@ -730,7 +733,7 @@ const EmlTextExtractor = () => {
                 <p className="mb-1.5 text-sm font-medium">Upload EML files</p>
                 <p className="mb-2 text-xs text-muted-foreground">Drag & drop or click to browse</p>
                 <div className="flex flex-wrap justify-center gap-1 text-xs text-muted-foreground/70">
-                  <span>.eml files only</span>
+                  <span>.eml and .txt files</span>
                   <span>∙</span>
                   <span>Max {maxFiles} files</span>
                   <span>∙</span>
@@ -775,7 +778,7 @@ const EmlTextExtractor = () => {
                           {getStatusIcon(file.status)}
                         </div>
                         <div className="flex min-w-0 flex-col gap-0.5 flex-1">
-                          <p className="truncate text-[13px] font-medium">{file.name}.eml</p>
+                          <p className="truncate text-[13px] font-medium">{file.name}{file.extension}</p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span>{formatBytes(file.size)}</span>
                             {file.status === "completed" && (
@@ -872,7 +875,7 @@ const EmlTextExtractor = () => {
                 <p className="mb-1.5 text-sm font-medium">Upload EML files</p>
                 <p className="mb-2 text-xs text-muted-foreground">Drag & drop or click to browse</p>
                 <div className="flex flex-wrap justify-center gap-1 text-xs text-muted-foreground/70">
-                  <span>.eml files only</span>
+                  <span>.eml and .txt files</span>
                   <span>∙</span>
                   <span>Max {maxFiles} files</span>
                   <span>∙</span>
@@ -917,7 +920,7 @@ const EmlTextExtractor = () => {
                           {getStatusIcon(file.status)}
                         </div>
                         <div className="flex min-w-0 flex-col gap-0.5 flex-1">
-                          <p className="truncate text-[13px] font-medium">{file.name}.eml</p>
+                          <p className="truncate text-[13px] font-medium">{file.name}{file.extension}</p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span>{formatBytes(file.size)}</span>
                             {file.status === "completed" && (

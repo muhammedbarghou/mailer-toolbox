@@ -6,12 +6,14 @@ import Image from "next/image"
 
 interface ImageData {
   offer: string | null
+  privacyTerms: string | null
   footer1: string | null
   footer2: string | null
 }
 
 interface ImageDimensions {
   offer: { width: number; height: number } | null
+  privacyTerms: { width: number; height: number } | null
   footer1: { width: number; height: number } | null
   footer2: { width: number; height: number } | null
 }
@@ -21,12 +23,14 @@ type ImageType = keyof ImageData
 export default function EmailImageCombiner() {
   const [images, setImages] = useState<ImageData>({
     offer: null,
+    privacyTerms: null,
     footer1: null,
     footer2: null,
   })
 
   const [dimensions, setDimensions] = useState<ImageDimensions>({
     offer: null,
+    privacyTerms: null,
     footer1: null,
     footer2: null,
   })
@@ -87,7 +91,7 @@ export default function EmailImageCombiner() {
 
   const combineImages = async () => {
     if (!images.offer || !images.footer1 || !images.footer2) {
-      alert("Please upload all three images first")
+      alert("Please upload all required images first")
       return
     }
 
@@ -104,14 +108,18 @@ export default function EmailImageCombiner() {
         })
       }
 
-      const [offerImg, footer1Img, footer2Img] = await Promise.all([
-        loadImage(images.offer),
-        loadImage(images.footer1),
-        loadImage(images.footer2),
-      ])
+      const offerImg = await loadImage(images.offer)
+      const footer1Img = await loadImage(images.footer1)
+      const footer2Img = await loadImage(images.footer2)
+      const privacyTermsImg = images.privacyTerms ? await loadImage(images.privacyTerms) : null
 
-      const maxWidth = Math.max(offerImg.width, footer1Img.width, footer2Img.width)
-      const totalHeight = offerImg.height + footer1Img.height + footer2Img.height
+      const widths = [offerImg.width, footer1Img.width, footer2Img.width]
+      if (privacyTermsImg) widths.push(privacyTermsImg.width)
+      const maxWidth = Math.max(...widths)
+
+      const heights = [offerImg.height, footer1Img.height, footer2Img.height]
+      if (privacyTermsImg) heights.push(privacyTermsImg.height)
+      const totalHeight = heights.reduce((sum, h) => sum + h, 0)
 
       const canvas = canvasRef.current
       if (!canvas) throw new Error("Canvas element not found")
@@ -134,6 +142,9 @@ export default function EmailImageCombiner() {
       }
 
       drawCentered(offerImg)
+      if (privacyTermsImg) {
+        drawCentered(privacyTermsImg)
+      }
       drawCentered(footer1Img)
       drawCentered(footer2Img)
 
@@ -228,13 +239,20 @@ export default function EmailImageCombiner() {
           </div>
 
           {/* Upload Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
             <ImageUploadBox
               type="offer"
               label="Email Offer"
               description="Main promotional content"
               image={images.offer}
               dims={dimensions.offer}
+            />
+            <ImageUploadBox
+              type="privacyTerms"
+              label="Privacy & Terms"
+              description="Privacy and terms of service (optional)"
+              image={images.privacyTerms}
+              dims={dimensions.privacyTerms}
             />
             <ImageUploadBox
               type="footer1"
