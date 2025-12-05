@@ -8,6 +8,18 @@ import {
     type InputHTMLAttributes,
   } from "react"
   
+  // Helper function to safely check if a value is a File instance
+  // This prevents "Right-hand side of 'instanceof' is not callable" errors
+  // when File is not available in certain contexts (e.g., SSR)
+  const isFile = (value: unknown): value is File => {
+    return (
+      typeof File !== "undefined" &&
+      typeof value === "object" &&
+      value !== null &&
+      value instanceof File
+    )
+  }
+  
   export type FileMetadata = {
     name: string
     size: number
@@ -84,7 +96,7 @@ import {
   
     const validateFile = useCallback(
       (file: File | FileMetadata): string | null => {
-        if (file instanceof File) {
+        if (isFile(file)) {
           if (file.size > maxSize) {
             return `File "${file.name}" exceeds the maximum size of ${formatBytes(maxSize)}.`
           }
@@ -96,8 +108,8 @@ import {
   
         if (accept !== "*") {
           const acceptedTypes = accept.split(",").map((type) => type.trim())
-          const fileType = file instanceof File ? file.type || "" : file.type
-          const fileExtension = `.${file instanceof File ? file.name.split(".").pop() : file.name.split(".").pop()}`
+          const fileType = isFile(file) ? file.type || "" : file.type
+          const fileExtension = `.${isFile(file) ? file.name.split(".").pop() : file.name.split(".").pop()}`
   
           const isAccepted = acceptedTypes.some((type) => {
             if (type.startsWith(".")) {
@@ -111,7 +123,7 @@ import {
           })
   
           if (!isAccepted) {
-            return `File "${file instanceof File ? file.name : file.name}" is not an accepted file type.`
+            return `File "${isFile(file) ? file.name : file.name}" is not an accepted file type.`
           }
         }
   
@@ -122,7 +134,7 @@ import {
   
     const createPreview = useCallback(
       (file: File | FileMetadata): string | undefined => {
-        if (file instanceof File) {
+        if (isFile(file)) {
           return URL.createObjectURL(file)
         }
         return file.url
@@ -131,7 +143,7 @@ import {
     )
   
     const generateUniqueId = useCallback((file: File | FileMetadata): string => {
-      if (file instanceof File) {
+      if (isFile(file)) {
         return `${file.name}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
       }
       return file.id
@@ -143,7 +155,7 @@ import {
         prev.files.forEach((file) => {
           if (
             file.preview &&
-            file.file instanceof File &&
+            isFile(file.file) &&
             file.file.type.startsWith("image/")
           ) {
             URL.revokeObjectURL(file.preview)
@@ -279,7 +291,7 @@ import {
           if (
             fileToRemove &&
             fileToRemove.preview &&
-            fileToRemove.file instanceof File &&
+            isFile(fileToRemove.file) &&
             fileToRemove.file.type.startsWith("image/")
           ) {
             URL.revokeObjectURL(fileToRemove.preview)

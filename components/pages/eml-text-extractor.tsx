@@ -8,6 +8,16 @@ import { toast } from "sonner"
 import { Upload, Download, FileText, X, AlertCircle, CheckCircle2, Loader2, Code, FileCode, File } from "lucide-react"
 import { useFileUpload, formatBytes } from "@/hooks/use-file-upload"
 
+// Helper function to safely check if a value is a File instance
+const isFile = (value: unknown): value is File => {
+  return (
+    typeof File !== "undefined" &&
+    typeof value === "object" &&
+    value !== null &&
+    value instanceof File
+  )
+}
+
 type TabType = "text" | "html" | "header" | "full"
 
 interface ProcessedFile {
@@ -320,7 +330,7 @@ const EmlTextExtractor = () => {
 
       // Initialize files
       for (const fileWrapper of filesToProcess) {
-        const file = fileWrapper.file instanceof File ? fileWrapper.file : null
+        const file = isFile(fileWrapper.file) ? fileWrapper.file : null
         if (!file) continue
 
         const fileExtension = file.name.match(/\.(eml|txt)$/i)?.[0] || ".eml"
@@ -341,7 +351,7 @@ const EmlTextExtractor = () => {
       // Process each file
       for (let i = 0; i < filesToProcess.length; i++) {
         const fileWrapper = filesToProcess[i]
-        const file = fileWrapper.file instanceof File ? fileWrapper.file : null
+        const file = isFile(fileWrapper.file) ? fileWrapper.file : null
         if (!file) continue
 
         try {
