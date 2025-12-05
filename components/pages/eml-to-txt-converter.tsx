@@ -8,13 +8,22 @@ import { Upload, Download, FileText, X, AlertCircle, CheckCircle2, Loader2 } fro
 import { useFileUpload, formatBytes } from "@/hooks/use-file-upload"
 
 // Helper function to safely check if a value is a File instance
+// This prevents "Right-hand side of 'instanceof' is not callable" errors
+// when File is not available or not callable in certain contexts (e.g., SSR, bundling)
 const isFile = (value: unknown): value is File => {
-  return (
-    typeof File !== "undefined" &&
-    typeof value === "object" &&
-    value !== null &&
-    value instanceof File
-  )
+  if (typeof value !== "object" || value === null) {
+    return false
+  }
+  // Check if File constructor exists and is callable before using instanceof
+  if (typeof File === "undefined" || typeof File !== "function") {
+    return false
+  }
+  try {
+    return value instanceof File
+  } catch {
+    // Fallback: check using constructor name if instanceof fails
+    return value.constructor?.name === "File"
+  }
 }
 
 interface ProcessedFile {
