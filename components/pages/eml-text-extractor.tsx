@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -287,6 +287,7 @@ const EmlTextExtractor = () => {
   const [activeTab, setActiveTab] = useState<TabType>("text")
   const [processedFiles, setProcessedFiles] = useState<ProcessedFile[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const previousFilesKeyRef = useRef<string>("")
 
   const maxSize = 10 * 1024 * 1024 // 10MB
   const maxFiles = 50
@@ -308,9 +309,6 @@ const EmlTextExtractor = () => {
     maxFiles,
     maxSize,
     accept: ".eml,.txt,message/rfc822",
-    onFilesChange: (newFiles) => {
-      processFiles(newFiles, activeTab)
-    },
   })
 
   const processFiles = useCallback(
@@ -399,18 +397,35 @@ const EmlTextExtractor = () => {
         toast.success(`${completedCount} file(s) processed successfully`)
       }
     },
-    [],
+    [activeTab],
   )
+
+  // Sync processedFiles when files are removed
+  useEffect(() => {
+    const currentFileIds = new Set(files.map((f) => f.id))
+    setProcessedFiles((prev) => prev.filter((pf) => currentFileIds.has(pf.id)))
+  }, [files])
+
+  // Process files when they are added or tab changes
+  const filesKey = files.map((f) => f.id).join(",")
+  const previousTabRef = useRef<TabType>(activeTab)
+  
+  useEffect(() => {
+    const filesChanged = filesKey !== previousFilesKeyRef.current
+    const tabChanged = previousTabRef.current !== activeTab
+    
+    // Process if files were added or tab changed
+    if (files.length > 0 && (filesChanged || tabChanged)) {
+      processFiles(files, activeTab)
+    }
+
+    previousFilesKeyRef.current = filesKey
+    previousTabRef.current = activeTab
+  }, [filesKey, activeTab, files, processFiles])
 
   const handleTabChange = async (value: string) => {
     const newTab = value as TabType
     setActiveTab(newTab)
-    
-    // If there are files, reprocess them for the new tab
-    if (files.length > 0) {
-      setProcessedFiles([])
-      await processFiles(files, newTab)
-    }
   }
 
   const handleDownloadCombined = () => {
