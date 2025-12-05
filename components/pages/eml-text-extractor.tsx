@@ -416,7 +416,7 @@ const EmlTextExtractor = () => {
         toast.success(`${completedCount} file(s) processed successfully`)
       }
     },
-    [activeTab],
+    [],
   )
 
   // Sync processedFiles when files are removed
