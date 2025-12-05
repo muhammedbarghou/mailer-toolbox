@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { toast } from "sonner"
-import { Upload, Download, FileText, X, AlertCircle, CheckCircle2, Loader2, Code, FileCode } from "lucide-react"
+import { Upload, Download, FileText, X, AlertCircle, CheckCircle2, Loader2, Code, FileCode, File } from "lucide-react"
 import { useFileUpload, formatBytes } from "@/hooks/use-file-upload"
 
-type TabType = "text" | "html" | "header"
+type TabType = "text" | "html" | "header" | "full"
 
 interface ProcessedFile {
   id: string
@@ -279,6 +279,10 @@ const extractHeaders = (rawEmailContent: string): string => {
   return headerLines.join("\n")
 }
 
+const extractFullEmail = (rawEmailContent: string): string => {
+  return normalizeEmailContent(rawEmailContent)
+}
+
 const EmlTextExtractor = () => {
   const [activeTab, setActiveTab] = useState<TabType>("text")
   const [processedFiles, setProcessedFiles] = useState<ProcessedFile[]>([])
@@ -355,6 +359,9 @@ const EmlTextExtractor = () => {
               break
             case "header":
               extractedContent = extractHeaders(emailContent)
+              break
+            case "full":
+              extractedContent = extractFullEmail(emailContent)
               break
           }
 
@@ -435,6 +442,11 @@ const EmlTextExtractor = () => {
         fileExtension = "txt"
         mimeType = "text/plain;charset=utf-8"
         break
+      case "full":
+        combinedContent = completedFiles.map((file) => file.content.trim()).join("\n_SEP_\n")
+        fileExtension = "txt"
+        mimeType = "text/plain;charset=utf-8"
+        break
     }
 
     const blob = new Blob([combinedContent], { type: mimeType })
@@ -491,6 +503,8 @@ const EmlTextExtractor = () => {
         return "Extract HTML content from multiple email files and combine them into a single file"
       case "header":
         return "Extract headers from multiple email files and combine them into a single file"
+      case "full":
+        return "Merge full email files and combine them with _SEP_ separator into a single file"
     }
   }
 
@@ -529,6 +543,17 @@ const EmlTextExtractor = () => {
             "Download the combined headers file",
           ],
         }
+      case "full":
+        return {
+          title: "How it works - Full Email",
+          items: [
+            "Upload up to 50 .eml email files",
+            "Each full email file is preserved as-is",
+            "No content extraction or modification is performed",
+            "All full emails are combined with '_SEP_' separator",
+            "Download the combined full email file",
+          ],
+        }
     }
   }
 
@@ -543,7 +568,7 @@ const EmlTextExtractor = () => {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="text" className="flex items-center gap-2">
               <FileText className="size-4" />
               <span className="hidden sm:inline">Merge Text Plain</span>
@@ -558,6 +583,11 @@ const EmlTextExtractor = () => {
               <FileCode className="size-4" />
               <span className="hidden sm:inline">Merge Header</span>
               <span className="sm:hidden">Header</span>
+            </TabsTrigger>
+            <TabsTrigger value="full" className="flex items-center gap-2">
+              <File className="size-4" />
+              <span className="hidden sm:inline">Merge Full</span>
+              <span className="sm:hidden">Full</span>
             </TabsTrigger>
           </TabsList>
 
@@ -981,6 +1011,148 @@ const EmlTextExtractor = () => {
                 <div className="space-y-2">
                   <h3 className="font-semibold flex items-center gap-2">
                     <FileCode className="size-4" />
+                    {getTabInfo().title}
+                  </h3>
+                  <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                    {getTabInfo().items.map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="full" className="space-y-6 mt-6">
+            {/* Upload Area */}
+            <div
+              role="button"
+              onClick={openFileDialog}
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              data-dragging={isDragging || undefined}
+              className="flex min-h-40 flex-col items-center justify-center rounded-xl border-2 border-dashed border-input p-4 transition-colors hover:bg-accent/50 has-disabled:pointer-events-none has-disabled:opacity-50 has-[input:focus]:border-ring has-[input:focus]:ring-[3px] has-[input:focus]:ring-ring/50 data-[dragging=true]:bg-accent/50 cursor-pointer"
+            >
+              <input {...getInputProps()} className="sr-only" aria-label="Upload files" />
+
+              <div className="flex flex-col items-center justify-center text-center">
+                <div
+                  className="mb-2 flex size-11 shrink-0 items-center justify-center rounded-full border bg-background"
+                  aria-hidden="true"
+                >
+                  <Upload className="size-4 opacity-60" />
+                </div>
+                <p className="mb-1.5 text-sm font-medium">Upload EML files</p>
+                <p className="mb-2 text-xs text-muted-foreground">Drag & drop or click to browse</p>
+                <div className="flex flex-wrap justify-center gap-1 text-xs text-muted-foreground/70">
+                  <span>.eml and .txt files</span>
+                  <span>∙</span>
+                  <span>Max {maxFiles} files</span>
+                  <span>∙</span>
+                  <span>Up to {formatBytes(maxSize)} per file</span>
+                </div>
+              </div>
+            </div>
+
+            {errors.length > 0 && (
+              <div className="flex items-center gap-1 text-xs text-destructive" role="alert">
+                <AlertCircle className="size-3 shrink-0" />
+                <span>{errors[0]}</span>
+              </div>
+            )}
+
+            {/* File List */}
+            {processedFiles.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Processed Files ({processedFiles.length})</h2>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={handleDownloadCombined}
+                      disabled={stats.fileCount === 0 || isProcessing}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download Combined ({stats.fileCount})
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleClearAll}>
+                      Clear All
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {processedFiles.map((file) => (
+                    <Card key={file.id} className="flex items-center justify-between gap-2 p-4">
+                      <div className="flex items-center gap-3 overflow-hidden flex-1">
+                        <div className="flex aspect-square size-10 shrink-0 items-center justify-center rounded border">
+                          {getStatusIcon(file.status)}
+                        </div>
+                        <div className="flex min-w-0 flex-col gap-0.5 flex-1">
+                          <p className="truncate text-[13px] font-medium">{file.name}{file.extension}</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{formatBytes(file.size)}</span>
+                            {file.status === "completed" && (
+                              <>
+                                <span>∙</span>
+                                <span>{file.content.length.toLocaleString()} chars</span>
+                              </>
+                            )}
+                            {file.error && (
+                              <>
+                                <span>∙</span>
+                                <span className="text-destructive">{file.error}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-8 text-muted-foreground/80 hover:bg-transparent hover:text-foreground"
+                          onClick={() => {
+                            removeFile(file.id)
+                            setProcessedFiles((prev) => prev.filter((f) => f.id !== file.id))
+                          }}
+                          aria-label="Remove file"
+                        >
+                          <X className="size-4" aria-hidden="true" />
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Stats */}
+            {stats.fileCount > 0 && (
+              <Card className="bg-muted/30 border-border">
+                <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-2xl font-bold">{stats.fileCount}</p>
+                    <p className="text-xs text-muted-foreground">Files Processed</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.totalChars.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Total Characters</p>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* Info Card */}
+            {processedFiles.length === 0 && (
+              <Card className="bg-muted/30 border-border p-6">
+                <div className="space-y-2">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <File className="size-4" />
                     {getTabInfo().title}
                   </h3>
                   <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
