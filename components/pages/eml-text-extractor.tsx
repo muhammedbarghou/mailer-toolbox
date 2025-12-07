@@ -443,8 +443,8 @@ const EmlTextExtractor = () => {
         break
       case "html":
         combinedContent = completedFiles.map((file) => file.content.trim()).join("\n\n<!-- __SEP__ -->\n\n")
-        fileExtension = "html"
-        mimeType = "text/html;charset=utf-8"
+        fileExtension = "txt"
+        mimeType = "text/plain;charset=utf-8"
         break
       case "header":
         combinedContent = completedFiles.map((file) => file.content.trim()).join("\n\n__SEP__\n\n")
@@ -531,7 +531,7 @@ const EmlTextExtractor = () => {
             "Each email is processed to extract HTML content (txt files are wrapped in HTML)",
             "Only HTML parts are extracted from multipart emails",
             "All extracted HTML are combined with '<!-- __SEP__ -->' separator",
-            "Download the combined HTML file",
+            "Download the combined text file (.txt)",
           ],
         }
       case "header":
