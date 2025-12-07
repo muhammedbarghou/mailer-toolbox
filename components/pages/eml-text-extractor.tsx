@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { toast } from "sonner"
 import { Upload, Download, FileText, X, AlertCircle, CheckCircle2, Loader2, Code, FileCode } from "lucide-react"
-import { useFileUpload, formatBytes } from "@/hooks/use-file-upload"
+import { useFileUpload, formatBytes, type FileWithPreview } from "@/hooks/use-file-upload"
 
 type TabType = "text" | "html" | "header"
 
@@ -282,34 +282,17 @@ export default function EmlTextExtractor() {
   const [activeTab, setActiveTab] = useState<TabType>("text")
   const [processedFiles, setProcessedFiles] = useState<ProcessedFile[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const activeTabRef = useRef(activeTab)
+
+  useEffect(() => {
+    activeTabRef.current = activeTab
+  }, [activeTab])
 
   const maxSize = 10 * 1024 * 1024 // 10MB
   const maxFiles = 50
 
-  const [
-    { files, isDragging, errors },
-    {
-      handleDragEnter,
-      handleDragLeave,
-      handleDragOver,
-      handleDrop,
-      openFileDialog,
-      removeFile,
-      clearFiles,
-      getInputProps,
-    },
-  ] = useFileUpload({
-    multiple: true,
-    maxFiles,
-    maxSize,
-    accept: ".eml,.txt,message/rfc822", // Accept .eml, .txt, and message/rfc822
-    onFilesChange: (newFiles) => {
-      processFiles(newFiles, activeTab)
-    },
-  })
-
   const processFiles = useCallback(
-    async (filesToProcess: typeof files, tabType: TabType) => {
+    async (filesToProcess: FileWithPreview[], tabType: TabType) => {
       if (filesToProcess.length === 0) return
 
       setIsProcessing(true)
@@ -391,6 +374,28 @@ export default function EmlTextExtractor() {
     },
     [],
   )
+
+  const [
+    { files, isDragging, errors },
+    {
+      handleDragEnter,
+      handleDragLeave,
+      handleDragOver,
+      handleDrop,
+      openFileDialog,
+      removeFile,
+      clearFiles,
+      getInputProps,
+    },
+  ] = useFileUpload({
+    multiple: true,
+    maxFiles,
+    maxSize,
+    accept: ".eml,.txt,message/rfc822", // Accept .eml, .txt, and message/rfc822
+    onFilesChange: (newFiles) => {
+      processFiles(newFiles, activeTabRef.current)
+    },
+  })
 
   const handleTabChange = async (value: string) => {
     const newTab = value as TabType
@@ -589,8 +594,120 @@ export default function EmlTextExtractor() {
                 </div>
               </div>
             </div>
-            {/* ... rest of the File List, Stats, Info Card unchanged ... */}
-            {/* ... <snip: identical structure, see your original code for the sections below> */}
+
+            {errors.length > 0 && (
+              <div className="flex items-center gap-1 text-xs text-destructive" role="alert">
+                <AlertCircle className="size-3 shrink-0" />
+                <span>{errors[0]}</span>
+              </div>
+            )}
+
+            {/* File List */}
+            {processedFiles.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Processed Files ({processedFiles.length})</h2>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={handleDownloadCombined}
+                      disabled={stats.fileCount === 0 || isProcessing}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download Combined ({stats.fileCount})
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleClearAll}>
+                      Clear All
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {processedFiles.map((file) => (
+                    <Card key={file.id} className="flex items-center justify-between gap-2 p-4">
+                      <div className="flex items-center gap-3 overflow-hidden flex-1">
+                        <div className="flex aspect-square size-10 shrink-0 items-center justify-center rounded border">
+                          {getStatusIcon(file.status)}
+                        </div>
+                        <div className="flex min-w-0 flex-col gap-0.5 flex-1">
+                          <p className="truncate text-[13px] font-medium">{file.name}.eml</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{formatBytes(file.size)}</span>
+                            {file.status === "completed" && (
+                              <>
+                                <span>∙</span>
+                                <span>{file.content.length.toLocaleString()} chars</span>
+                                <span>∙</span>
+                                <span>{file.content.trim() ? file.content.trim().split(/\s+/).length : 0} words</span>
+                              </>
+                            )}
+                            {file.error && (
+                              <>
+                                <span>∙</span>
+                                <span className="text-destructive">{file.error}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-8 text-muted-foreground/80 hover:bg-transparent hover:text-foreground"
+                          onClick={() => {
+                            removeFile(file.id)
+                            setProcessedFiles((prev) => prev.filter((f) => f.id !== file.id))
+                          }}
+                          aria-label="Remove file"
+                        >
+                          <X className="size-4" aria-hidden="true" />
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Stats */}
+            {stats.fileCount > 0 && (
+              <Card className="bg-muted/30 border-border">
+                <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-2xl font-bold">{stats.fileCount}</p>
+                    <p className="text-xs text-muted-foreground">Files Processed</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.totalChars.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Total Characters</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.totalWords.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Total Words</p>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* Info Card */}
+            {processedFiles.length === 0 && (
+              <Card className="bg-muted/30 border-border p-6">
+                <div className="space-y-2">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <FileText className="size-4" />
+                    {getTabInfo().title}
+                  </h3>
+                  <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                    {getTabInfo().items.map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="html" className="space-y-6 mt-6">
@@ -624,8 +741,114 @@ export default function EmlTextExtractor() {
                 </div>
               </div>
             </div>
-            {/* ... rest of the File List, Stats, Info Card unchanged ... */}
-            {/* ... <snip: identical structure, see your original code for the sections below> */}
+
+            {errors.length > 0 && (
+              <div className="flex items-center gap-1 text-xs text-destructive" role="alert">
+                <AlertCircle className="size-3 shrink-0" />
+                <span>{errors[0]}</span>
+              </div>
+            )}
+
+            {/* File List */}
+            {processedFiles.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Processed Files ({processedFiles.length})</h2>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={handleDownloadCombined}
+                      disabled={stats.fileCount === 0 || isProcessing}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download Combined ({stats.fileCount})
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleClearAll}>
+                      Clear All
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {processedFiles.map((file) => (
+                    <Card key={file.id} className="flex items-center justify-between gap-2 p-4">
+                      <div className="flex items-center gap-3 overflow-hidden flex-1">
+                        <div className="flex aspect-square size-10 shrink-0 items-center justify-center rounded border">
+                          {getStatusIcon(file.status)}
+                        </div>
+                        <div className="flex min-w-0 flex-col gap-0.5 flex-1">
+                          <p className="truncate text-[13px] font-medium">{file.name}.eml</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{formatBytes(file.size)}</span>
+                            {file.status === "completed" && (
+                              <>
+                                <span>∙</span>
+                                <span>{file.content.length.toLocaleString()} chars</span>
+                              </>
+                            )}
+                            {file.error && (
+                              <>
+                                <span>∙</span>
+                                <span className="text-destructive">{file.error}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-8 text-muted-foreground/80 hover:bg-transparent hover:text-foreground"
+                          onClick={() => {
+                            removeFile(file.id)
+                            setProcessedFiles((prev) => prev.filter((f) => f.id !== file.id))
+                          }}
+                          aria-label="Remove file"
+                        >
+                          <X className="size-4" aria-hidden="true" />
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Stats */}
+            {stats.fileCount > 0 && (
+              <Card className="bg-muted/30 border-border">
+                <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-2xl font-bold">{stats.fileCount}</p>
+                    <p className="text-xs text-muted-foreground">Files Processed</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.totalChars.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Total Characters</p>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* Info Card */}
+            {processedFiles.length === 0 && (
+              <Card className="bg-muted/30 border-border p-6">
+                <div className="space-y-2">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Code className="size-4" />
+                    {getTabInfo().title}
+                  </h3>
+                  <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                    {getTabInfo().items.map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="header" className="space-y-6 mt-6">
@@ -659,8 +882,114 @@ export default function EmlTextExtractor() {
                 </div>
               </div>
             </div>
-            {/* ... rest of the File List, Stats, Info Card unchanged ... */}
-            {/* ... <snip: identical structure, see your original code for the sections below> */}
+
+            {errors.length > 0 && (
+              <div className="flex items-center gap-1 text-xs text-destructive" role="alert">
+                <AlertCircle className="size-3 shrink-0" />
+                <span>{errors[0]}</span>
+              </div>
+            )}
+
+            {/* File List */}
+            {processedFiles.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Processed Files ({processedFiles.length})</h2>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={handleDownloadCombined}
+                      disabled={stats.fileCount === 0 || isProcessing}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download Combined ({stats.fileCount})
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleClearAll}>
+                      Clear All
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {processedFiles.map((file) => (
+                    <Card key={file.id} className="flex items-center justify-between gap-2 p-4">
+                      <div className="flex items-center gap-3 overflow-hidden flex-1">
+                        <div className="flex aspect-square size-10 shrink-0 items-center justify-center rounded border">
+                          {getStatusIcon(file.status)}
+                        </div>
+                        <div className="flex min-w-0 flex-col gap-0.5 flex-1">
+                          <p className="truncate text-[13px] font-medium">{file.name}.eml</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{formatBytes(file.size)}</span>
+                            {file.status === "completed" && (
+                              <>
+                                <span>∙</span>
+                                <span>{file.content.length.toLocaleString()} chars</span>
+                              </>
+                            )}
+                            {file.error && (
+                              <>
+                                <span>∙</span>
+                                <span className="text-destructive">{file.error}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-8 text-muted-foreground/80 hover:bg-transparent hover:text-foreground"
+                          onClick={() => {
+                            removeFile(file.id)
+                            setProcessedFiles((prev) => prev.filter((f) => f.id !== file.id))
+                          }}
+                          aria-label="Remove file"
+                        >
+                          <X className="size-4" aria-hidden="true" />
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Stats */}
+            {stats.fileCount > 0 && (
+              <Card className="bg-muted/30 border-border">
+                <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-2xl font-bold">{stats.fileCount}</p>
+                    <p className="text-xs text-muted-foreground">Files Processed</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.totalChars.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Total Characters</p>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* Info Card */}
+            {processedFiles.length === 0 && (
+              <Card className="bg-muted/30 border-border p-6">
+                <div className="space-y-2">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <FileCode className="size-4" />
+                    {getTabInfo().title}
+                  </h3>
+                  <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                    {getTabInfo().items.map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </Card>
+            )}
           </TabsContent>
         </Tabs>
       </div>
