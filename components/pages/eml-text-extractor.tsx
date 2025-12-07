@@ -568,7 +568,7 @@ export default function EmlTextExtractor() {
               onDragOver={handleDragOver}
               onDrop={handleDrop}
               data-dragging={isDragging || undefined}
-              className="flex min-h-40 flex-col items-center justify-center rounded-xl border-2 border-dashed border-input p-4 transition-colors hover:bg-accent/50 has-disabled:pointer-events-none has[...]
+              className="flex min-h-40 flex-col items-center justify-center rounded-xl border-2 border-dashed border-input p-4 transition-colors hover:bg-accent/50 has-disabled:pointer-events-none has-disabled:opacity-50 has-[input:focus]:border-ring has-[input:focus]:ring-[3px] has-[input:focus]:ring-ring/50 data-[dragging=true]:bg-accent/50 cursor-pointer"
             >
               <input {...getInputProps()} className="sr-only" aria-label="Upload files" />
               <div className="flex flex-col items-center justify-center text-center">
@@ -603,7 +603,7 @@ export default function EmlTextExtractor() {
               onDragOver={handleDragOver}
               onDrop={handleDrop}
               data-dragging={isDragging || undefined}
-              className="flex min-h-40 flex-col items-center justify-center rounded-xl border-2 border-dashed border-input p-4 transition-colors hover:bg-accent/50 has-disabled:pointer-events-none has[...]
+              className="flex min-h-40 flex-col items-center justify-center rounded-xl border-2 border-dashed border-input p-4 transition-colors hover:bg-accent/50 has-disabled:pointer-events-none has-disabled:opacity-50 has-[input:focus]:border-ring has-[input:focus]:ring-[3px] has-[input:focus]:ring-ring/50 data-[dragging=true]:bg-accent/50 cursor-pointer"
             >
               <input {...getInputProps()} className="sr-only" aria-label="Upload files" />
               <div className="flex flex-col items-center justify-center text-center">
@@ -638,7 +638,7 @@ export default function EmlTextExtractor() {
               onDragOver={handleDragOver}
               onDrop={handleDrop}
               data-dragging={isDragging || undefined}
-              className="flex min-h-40 flex-col items-center justify-center rounded-xl border-2 border-dashed border-input p-4 transition-colors hover:bg-accent/50 has-disabled:pointer-events-none has[...]
+              className="flex min-h-40 flex-col items-center justify-center rounded-xl border-2 border-dashed border-input p-4 transition-colors hover:bg-accent/50 has-disabled:pointer-events-none has-disabled:opacity-50 has-[input:focus]:border-ring has-[input:focus]:ring-[3px] has-[input:focus]:ring-ring/50 data-[dragging=true]:bg-accent/50 cursor-pointer"
             >
               <input {...getInputProps()} className="sr-only" aria-label="Upload files" />
               <div className="flex flex-col items-center justify-center text-center">
