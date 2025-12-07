@@ -177,17 +177,18 @@ const collectPlainTextSections = (section: EmailSection, collectedSections: stri
     return
   }
 
-  // Only extract explicitly text/plain content, skip HTML and other types
-  const isPlainText = contentType.includes("text/plain")
+  const isPlainText = !contentType || contentType.includes("text/plain")
   if (!isPlainText) {
+    return
+  }
+
+  if (transferEncoding.includes("base64")) {
     return
   }
 
   let resolvedBody = section.body
   if (transferEncoding.includes("quoted-printable")) {
     resolvedBody = decodeQuotedPrintable(resolvedBody)
-  } else if (transferEncoding.includes("base64")) {
-    resolvedBody = decodeBase64(resolvedBody)
   }
 
   const cleaned = cleanText(resolvedBody)
@@ -241,7 +242,13 @@ const extractPlainText = (rawEmailContent: string): string => {
 
   collectPlainTextSections(rootSection, collectedSections)
 
-  // Only return collected plain text sections, no fallback to entire body
+  if (collectedSections.length === 0 && !getHeaderValue(rootSection.headers, "content-type")) {
+    const fallback = cleanText(rootSection.body)
+    if (fallback) {
+      collectedSections.push(fallback)
+    }
+  }
+
   return collectedSections.join("\n\n")
 }
 
@@ -271,7 +278,7 @@ const extractHeaders = (rawEmailContent: string): string => {
   return headerLines.join("\n")
 }
 
-const EmlTextExtractor = () => {
+export default function EmlTextExtractor() {
   const [activeTab, setActiveTab] = useState<TabType>("text")
   const [processedFiles, setProcessedFiles] = useState<ProcessedFile[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
@@ -295,7 +302,7 @@ const EmlTextExtractor = () => {
     multiple: true,
     maxFiles,
     maxSize,
-    accept: ".eml,.txt,message/rfc822,text/plain",
+    accept: ".eml,message/rfc822",
     onFilesChange: (newFiles) => {
       processFiles(newFiles, activeTab)
     },
@@ -315,7 +322,7 @@ const EmlTextExtractor = () => {
 
         const processedFile: ProcessedFile = {
           id: fileWrapper.id,
-          name: file.name,
+          name: file.name.replace(/\.eml$/i, ""),
           content: "",
           size: file.size,
           status: "processing",
@@ -333,38 +340,19 @@ const EmlTextExtractor = () => {
         if (!file) continue
 
         try {
-          const fileContent = await file.text()
-          const isTxtFile = file.name.toLowerCase().endsWith(".txt")
+          const emailContent = await file.text()
           let extractedContent = ""
 
-          if (isTxtFile) {
-            // For txt files, use content directly based on tab type
-            switch (tabType) {
-              case "text":
-                extractedContent = fileContent.trim()
-                break
-              case "html":
-                // For txt files in HTML tab, wrap content in HTML tags or return empty
-                extractedContent = fileContent.trim() ? `<pre>${fileContent.trim()}</pre>` : ""
-                break
-              case "header":
-                // For txt files in header tab, return empty as there are no headers
-                extractedContent = ""
-                break
-            }
-          } else {
-            // For eml files, use existing extraction logic
-            switch (tabType) {
-              case "text":
-                extractedContent = extractPlainText(fileContent)
-                break
-              case "html":
-                extractedContent = extractHtml(fileContent)
-                break
-              case "header":
-                extractedContent = extractHeaders(fileContent)
-                break
-            }
+          switch (tabType) {
+            case "text":
+              extractedContent = extractPlainText(emailContent)
+              break
+            case "html":
+              extractedContent = extractHtml(emailContent)
+              break
+            case "header":
+              extractedContent = extractHeaders(emailContent)
+              break
           }
 
           setProcessedFiles((prev) =>
@@ -436,8 +424,8 @@ const EmlTextExtractor = () => {
         break
       case "html":
         combinedContent = completedFiles.map((file) => file.content.trim()).join("\n\n<!-- __SEP__ -->\n\n")
-        fileExtension = "txt"
-        mimeType = "text/plain;charset=utf-8"
+        fileExtension = "html"
+        mimeType = "text/html;charset=utf-8"
         break
       case "header":
         combinedContent = completedFiles.map((file) => file.content.trim()).join("\n\n__SEP__\n\n")
@@ -495,9 +483,9 @@ const EmlTextExtractor = () => {
   const getTabDescription = () => {
     switch (activeTab) {
       case "text":
-        return "Extract plain text from multiple email or text files and combine them into a single file"
+        return "Extract plain text from multiple email files and combine them into a single file"
       case "html":
-        return "Extract HTML content from multiple email or text files and combine them into a single file"
+        return "Extract HTML content from multiple email files and combine them into a single file"
       case "header":
         return "Extract headers from multiple email files and combine them into a single file"
     }
@@ -509,9 +497,9 @@ const EmlTextExtractor = () => {
         return {
           title: "How it works - Plain Text",
           items: [
-            "Upload up to 50 .eml or .txt files",
-            "Each email is processed to extract plain text content (txt files use content directly)",
-            "Headers and HTML are automatically removed from EML files",
+            "Upload up to 50 .eml email files",
+            "Each email is processed to extract plain text content",
+            "Headers and HTML are automatically removed",
             "All extracted texts are combined with '__SEP__' separator",
             "Download the combined text file",
           ],
@@ -520,11 +508,11 @@ const EmlTextExtractor = () => {
         return {
           title: "How it works - HTML",
           items: [
-            "Upload up to 50 .eml or .txt files",
-            "Each email is processed to extract HTML content (txt files are wrapped in HTML)",
+            "Upload up to 50 .eml email files",
+            "Each email is processed to extract HTML content",
             "Only HTML parts are extracted from multipart emails",
             "All extracted HTML are combined with '<!-- __SEP__ -->' separator",
-            "Download the combined text file (.txt)",
+            "Download the combined HTML file",
           ],
         }
       case "header":
@@ -536,7 +524,6 @@ const EmlTextExtractor = () => {
             "Headers are formatted with proper capitalization",
             "All extracted headers are combined with '__SEP__' separator",
             "Download the combined headers file",
-            "Note: TXT files don't contain headers and will be skipped",
           ],
         }
     }
@@ -592,10 +579,10 @@ const EmlTextExtractor = () => {
                 >
                   <Upload className="size-4 opacity-60" />
                 </div>
-                <p className="mb-1.5 text-sm font-medium">Upload EML or TXT files</p>
+                <p className="mb-1.5 text-sm font-medium">Upload EML files</p>
                 <p className="mb-2 text-xs text-muted-foreground">Drag & drop or click to browse</p>
                 <div className="flex flex-wrap justify-center gap-1 text-xs text-muted-foreground/70">
-                  <span>.eml and .txt files</span>
+                  <span>.eml files only</span>
                   <span>∙</span>
                   <span>Max {maxFiles} files</span>
                   <span>∙</span>
@@ -640,7 +627,7 @@ const EmlTextExtractor = () => {
                           {getStatusIcon(file.status)}
                         </div>
                         <div className="flex min-w-0 flex-col gap-0.5 flex-1">
-                          <p className="truncate text-[13px] font-medium">{file.name}</p>
+                          <p className="truncate text-[13px] font-medium">{file.name}.eml</p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span>{formatBytes(file.size)}</span>
                             {file.status === "completed" && (
@@ -740,10 +727,10 @@ const EmlTextExtractor = () => {
                 >
                   <Upload className="size-4 opacity-60" />
                 </div>
-                <p className="mb-1.5 text-sm font-medium">Upload EML or TXT files</p>
+                <p className="mb-1.5 text-sm font-medium">Upload EML files</p>
                 <p className="mb-2 text-xs text-muted-foreground">Drag & drop or click to browse</p>
                 <div className="flex flex-wrap justify-center gap-1 text-xs text-muted-foreground/70">
-                  <span>.eml and .txt files</span>
+                  <span>.eml files only</span>
                   <span>∙</span>
                   <span>Max {maxFiles} files</span>
                   <span>∙</span>
@@ -788,7 +775,7 @@ const EmlTextExtractor = () => {
                           {getStatusIcon(file.status)}
                         </div>
                         <div className="flex min-w-0 flex-col gap-0.5 flex-1">
-                          <p className="truncate text-[13px] font-medium">{file.name}</p>
+                          <p className="truncate text-[13px] font-medium">{file.name}.eml</p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span>{formatBytes(file.size)}</span>
                             {file.status === "completed" && (
@@ -882,10 +869,10 @@ const EmlTextExtractor = () => {
                 >
                   <Upload className="size-4 opacity-60" />
                 </div>
-                <p className="mb-1.5 text-sm font-medium">Upload EML or TXT files</p>
+                <p className="mb-1.5 text-sm font-medium">Upload EML files</p>
                 <p className="mb-2 text-xs text-muted-foreground">Drag & drop or click to browse</p>
                 <div className="flex flex-wrap justify-center gap-1 text-xs text-muted-foreground/70">
-                  <span>.eml and .txt files</span>
+                  <span>.eml files only</span>
                   <span>∙</span>
                   <span>Max {maxFiles} files</span>
                   <span>∙</span>
@@ -930,7 +917,7 @@ const EmlTextExtractor = () => {
                           {getStatusIcon(file.status)}
                         </div>
                         <div className="flex min-w-0 flex-col gap-0.5 flex-1">
-                          <p className="truncate text-[13px] font-medium">{file.name}</p>
+                          <p className="truncate text-[13px] font-medium">{file.name}.eml</p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span>{formatBytes(file.size)}</span>
                             {file.status === "completed" && (
@@ -1007,5 +994,3 @@ const EmlTextExtractor = () => {
     </div>
   )
 }
-
-export default EmlTextExtractor
