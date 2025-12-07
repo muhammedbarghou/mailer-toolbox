@@ -177,18 +177,17 @@ const collectPlainTextSections = (section: EmailSection, collectedSections: stri
     return
   }
 
-  const isPlainText = !contentType || contentType.includes("text/plain")
+  // Only extract explicitly text/plain content, skip HTML and other types
+  const isPlainText = contentType.includes("text/plain")
   if (!isPlainText) {
-    return
-  }
-
-  if (transferEncoding.includes("base64")) {
     return
   }
 
   let resolvedBody = section.body
   if (transferEncoding.includes("quoted-printable")) {
     resolvedBody = decodeQuotedPrintable(resolvedBody)
+  } else if (transferEncoding.includes("base64")) {
+    resolvedBody = decodeBase64(resolvedBody)
   }
 
   const cleaned = cleanText(resolvedBody)
@@ -242,13 +241,7 @@ const extractPlainText = (rawEmailContent: string): string => {
 
   collectPlainTextSections(rootSection, collectedSections)
 
-  if (collectedSections.length === 0 && !getHeaderValue(rootSection.headers, "content-type")) {
-    const fallback = cleanText(rootSection.body)
-    if (fallback) {
-      collectedSections.push(fallback)
-    }
-  }
-
+  // Only return collected plain text sections, no fallback to entire body
   return collectedSections.join("\n\n")
 }
 
