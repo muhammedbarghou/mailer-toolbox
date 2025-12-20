@@ -330,33 +330,101 @@ export default function EmlTextExtractor() {
           const emailContent = await file.text()
           let extractedContent = ""
 
-          switch (tabType) {
-            case "text":
-              extractedContent = extractPlainText(emailContent)
-              break
-            case "html":
-              extractedContent = extractHtml(emailContent)
-              break
-            case "header":
-              extractedContent = extractHeaders(emailContent)
-              break
-            case "source":
-              extractedContent = extractSource(emailContent)
-              break
+          // Source tab uses raw content, no parsing needed
+          if (tabType === "source") {
+            extractedContent = extractSource(emailContent)
+            setProcessedFiles((prev) =>
+              prev.map((pf) =>
+                pf.id === fileWrapper.id
+                  ? {
+                      ...pf,
+                      content: extractedContent,
+                      status: extractedContent.trim() ? "completed" : "error",
+                      error: extractedContent.trim() ? undefined : `No ${tabType} content found`,
+                    }
+                  : pf,
+              ),
+            )
+            continue
           }
 
-          setProcessedFiles((prev) =>
-            prev.map((pf) =>
-              pf.id === fileWrapper.id
-                ? {
-                    ...pf,
-                    content: extractedContent,
-                    status: extractedContent.trim() ? "completed" : "error",
-                    error: extractedContent.trim() ? undefined : `No ${tabType} content found`,
+          // Try API parsing first for text, html, and header tabs
+          try {
+            const response = await fetch("/api/eml-parse", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ emailContent }),
+            })
+
+            if (response.ok) {
+              const parsed = await response.json()
+
+              switch (tabType) {
+                case "text":
+                  extractedContent = parsed.text || ""
+                  break
+                case "html":
+                  extractedContent = parsed.html || ""
+                  break
+                case "header":
+                  // Format headers object into string
+                  const headerLines: string[] = []
+                  for (const [key, value] of Object.entries(parsed.headers || {})) {
+                    const formattedKey = key
+                      .split("-")
+                      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                      .join("-")
+                    headerLines.push(`${formattedKey}: ${value}`)
                   }
-                : pf,
-            ),
-          )
+                  extractedContent = headerLines.join("\n")
+                  break
+              }
+
+              setProcessedFiles((prev) =>
+                prev.map((pf) =>
+                  pf.id === fileWrapper.id
+                    ? {
+                        ...pf,
+                        content: extractedContent,
+                        status: extractedContent.trim() ? "completed" : "error",
+                        error: extractedContent.trim() ? undefined : `No ${tabType} content found`,
+                      }
+                    : pf,
+                ),
+              )
+            } else {
+              // API failed, fallback to manual parsing
+              throw new Error("API parsing failed")
+            }
+          } catch (apiError) {
+            // Fallback to manual parsing if API fails
+            switch (tabType) {
+              case "text":
+                extractedContent = extractPlainText(emailContent)
+                break
+              case "html":
+                extractedContent = extractHtml(emailContent)
+                break
+              case "header":
+                extractedContent = extractHeaders(emailContent)
+                break
+            }
+
+            setProcessedFiles((prev) =>
+              prev.map((pf) =>
+                pf.id === fileWrapper.id
+                  ? {
+                      ...pf,
+                      content: extractedContent,
+                      status: extractedContent.trim() ? "completed" : "error",
+                      error: extractedContent.trim() ? undefined : `No ${tabType} content found`,
+                    }
+                  : pf,
+              ),
+            )
+          }
         } catch (error) {
           setProcessedFiles((prev) =>
             prev.map((pf) =>
