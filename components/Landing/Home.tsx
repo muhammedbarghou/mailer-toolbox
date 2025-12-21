@@ -10,7 +10,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger"
 import { useAuth } from "@/contexts/AuthContext"
 import { useRouter } from "next/navigation"
 import { GridPattern } from "@/components/ui/shadcn-io/grid-pattern"
-import { Sparkles, Inbox, Zap, Shield, UserCheck } from "lucide-react"
+import { Sparkles, Inbox, Zap, Shield, UserCheck, Mail, FileText, Network, Image as ImageIcon, Palette, Code, Search } from "lucide-react"
 
 
 const Home = () => {
@@ -415,71 +415,155 @@ const Home = () => {
               </div>
             </div>
 
-            {/* About & Data Use Section for Google Verification */}
-            <div className="mt-20 w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-10 text-left">
-              {/* About the app */}
+            {/* About Mailer Toolkit Section */}
+            <div className="mt-20 w-full max-w-5xl">
               <div className="bg-background/60 backdrop-blur-xl rounded-xl border border-border/60 p-6 md:p-8 shadow-sm">
                 <h2 className="flex items-center gap-2 text-xl md:text-2xl font-semibold mb-4">
                   <Sparkles className="h-5 w-5 text-primary" />
                   <span>About Mailer Toolkit</span>
                 </h2>
-                <p className="text-muted-foreground text-sm md:text-base leading-relaxed mb-3">
-                  Mailer Toolkit is an all-in-one suite of professional email and IP tools designed for marketers, developers,
-                  and deliverability specialists. It helps you rewrite email bodies and subject lines, process headers, extract
-                  text from EML files, convert HTML to images, compare IP lists, and more.
+                <p className="text-muted-foreground text-sm md:text-base leading-relaxed mb-4">
+                  <strong>Mailer Toolkit</strong> is an all-in-one suite of professional email and IP tools designed for marketers, developers,
+                  and deliverability specialists. Created by <strong>Mohamed Barghou</strong>, this platform helps you rewrite email bodies and subject lines, 
+                  process headers, extract text from EML files, convert HTML to images, compare IP lists, and analyze email deliverability.
                 </p>
-                <p className="text-muted-foreground text-sm md:text-base leading-relaxed">
+                <p className="text-muted-foreground text-sm md:text-base leading-relaxed mb-6">
                   The platform focuses on testing, analyzing, and optimizing your email content and infrastructure. It does not
                   send bulk email itself and is intended to help you improve compliance and deliverability across your own
                   systems and providers.
                 </p>
-              </div>
 
-              {/* Data & Google usage */}
-              <div className="bg-background/60 backdrop-blur-xl rounded-xl border border-border/60 p-6 md:p-8 shadow-sm flex flex-col gap-4">
+                <h3 className="text-lg md:text-xl font-semibold mb-4">Complete Feature Suite</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex items-start gap-3">
+                    <Mail className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <h4 className="font-medium text-sm md:text-base mb-1">AI Email Rewriter</h4>
+                      <p className="text-muted-foreground text-xs md:text-sm">Transform HTML emails with AI to bypass spam filters and improve deliverability while maintaining original design.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <FileText className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <h4 className="font-medium text-sm md:text-base mb-1">Subject Line Rewriter</h4>
+                      <p className="text-muted-foreground text-xs md:text-sm">Generate multiple optimized subject line alternatives to improve open rates.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Code className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <h4 className="font-medium text-sm md:text-base mb-1">Header Processor</h4>
+                      <p className="text-muted-foreground text-xs md:text-sm">Process and analyze email headers to extract sending IPs, domains, and routing information.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Network className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <h4 className="font-medium text-sm md:text-base mb-1">Email Source Separator</h4>
+                      <p className="text-muted-foreground text-xs md:text-sm">Separate and extract different parts of email sources for analysis.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <FileText className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <h4 className="font-medium text-sm md:text-base mb-1">EML to TXT Converter</h4>
+                      <p className="text-muted-foreground text-xs md:text-sm">Extract and convert text content from EML email files.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <ImageIcon className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <h4 className="font-medium text-sm md:text-base mb-1">HTML to Image Converter</h4>
+                      <p className="text-muted-foreground text-xs md:text-sm">Convert HTML email content into image formats for preview and testing.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Network className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <h4 className="font-medium text-sm md:text-base mb-1">IP Comparator</h4>
+                      <p className="text-muted-foreground text-xs md:text-sm">Compare and analyze IP address lists for reputation and deliverability insights.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Search className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <h4 className="font-medium text-sm md:text-base mb-1">Gmail Deliverability Viewer</h4>
+                      <p className="text-muted-foreground text-xs md:text-sm">Search and analyze Gmail metadata to understand inbox placement (Primary/Promotions/Spam).</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Palette className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <h4 className="font-medium text-sm md:text-base mb-1">Photo Editor</h4>
+                      <p className="text-muted-foreground text-xs md:text-sm">Edit and process images for use in email campaigns.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Data Use Section for Google Verification */}
+            <div className="mt-10 w-full max-w-5xl">
+
+              <div className="bg-background/60 backdrop-blur-xl rounded-xl border border-border/60 p-6 md:p-8 shadow-sm flex flex-col gap-6">
                 <div>
-                  <h2 className="flex items-center gap-2 text-xl md:text-2xl font-semibold mb-2">
+                  <h2 className="flex items-center gap-2 text-xl md:text-2xl font-semibold mb-4">
                     <Shield className="h-5 w-5 text-primary" />
                     <span>How We Use Your Data</span>
                   </h2>
-                  <p className="text-muted-foreground text-sm md:text-base leading-relaxed mb-3">
-                    We only use the content, files, and IP lists you provide to run the selected tools and return results to you.
-                    Uploaded data and processing output are not sold or shared for advertising.
+                  <p className="text-muted-foreground text-sm md:text-base leading-relaxed mb-4">
+                    <strong>Mailer Toolkit</strong> only uses the content, files, and IP lists you provide to run the selected tools and return results to you.
+                    Uploaded data and processing output are not sold or shared for advertising purposes.
                   </p>
-                  <ul className="list-disc list-inside space-y-1 text-muted-foreground text-sm md:text-base">
+                  <ul className="list-disc list-inside space-y-2 text-muted-foreground text-sm md:text-base mb-4">
                     <li>Data you upload (emails, EML files, headers, images, IPs) is processed only to generate tool outputs.</li>
                     <li>We do not use your content or Google data to build advertising profiles or for unrelated purposes.</li>
                     <li>Processing data is retained only as long as necessary to provide results, then discarded.</li>
                   </ul>
                 </div>
 
-                <div>
-                  <h3 className="flex items-center gap-2 text-base md:text-lg font-semibold mb-2">
+                <div className="border-t border-border/60 pt-6">
+                  <h3 className="flex items-center gap-2 text-lg md:text-xl font-semibold mb-4">
                     <UserCheck className="h-5 w-5 text-primary" />
-                    <span>Google &amp; Gmail Data</span>
+                    <span>Google &amp; Gmail Data Usage</span>
                   </h3>
-                  <p className="text-muted-foreground text-sm md:text-base leading-relaxed mb-3">
-                    When you connect your Google account, Mailer Toolkit only accesses the minimum Gmail data needed to perform
-                    actions you request (such as searching or analyzing messages for deliverability). We comply with the Google
-                    API Services User Data Policy, including the Limited Use requirements.
-                  </p>
-                  <ul className="list-disc list-inside space-y-1 text-muted-foreground text-sm md:text-base mb-3">
-                    <li>Google data is not used to serve ads or sold to third parties.</li>
-                    <li>Google data is not used to train generalized AI models.</li>
-                    <li>You can disconnect access at any time through your Google Account and within our app.</li>
+                  <div className="bg-primary/5 rounded-lg p-4 mb-4 border border-primary/10">
+                    <p className="text-foreground text-sm md:text-base leading-relaxed mb-3 font-medium">
+                      <strong>Gmail Read-Only Access:</strong> Mailer Toolkit requests read-only access to your Gmail account 
+                      (<code className="bg-background px-2 py-0.5 rounded text-xs">gmail.readonly</code> scope) solely for the 
+                      <strong> Gmail Deliverability Viewer</strong> feature.
+                    </p>
+                    <p className="text-muted-foreground text-sm md:text-base leading-relaxed mb-3">
+                      This feature allows you to search and analyze email metadata (subject lines, sender information, labels, and headers) 
+                      to understand where your emails land in Gmail inboxes—whether in Primary, Promotions, Spam, or Social tabs. 
+                      This helps you optimize your email deliverability and compliance.
+                    </p>
+                    <p className="text-muted-foreground text-sm md:text-base leading-relaxed">
+                      <strong>We comply with Google API Services User Data Policy, including Limited Use requirements.</strong>
+                    </p>
+                  </div>
+                  <ul className="list-disc list-inside space-y-2 text-muted-foreground text-sm md:text-base mb-4">
+                    <li><strong>Google data is NOT used to serve ads</strong> or sold to third parties.</li>
+                    <li><strong>Google data is NOT used to train generalized AI models.</strong></li>
+                    <li><strong>Google data is NOT used for advertising purposes</strong> or building user profiles.</li>
+                    <li>We only access the minimum Gmail data needed to perform actions you explicitly request.</li>
+                    <li><strong>You can revoke access at any time</strong> through your Google Account settings or within our app.</li>
                   </ul>
                 </div>
 
-                <div className="mt-1 flex flex-col gap-2">
-                  <p className="text-muted-foreground text-xs md:text-sm">
-                    For full details on how we collect, use, and protect data (including Google user data), please review our
-                    Privacy Policy.
-                  </p>
-                  <Button asChild variant="outline" className="self-start text-xs md:text-sm">
-                    <Link href="/privacy">
-                      View Privacy Policy
-                    </Link>
-                  </Button>
+                <div className="border-t border-border/60 pt-6">
+                  <div className="bg-accent/10 rounded-lg p-4 border border-accent/20">
+                    <p className="text-foreground text-sm md:text-base leading-relaxed mb-4 font-medium">
+                      For complete details on how we collect, use, and protect your data (including Google user data), 
+                      please review our comprehensive Privacy Policy.
+                    </p>
+                    <Button asChild variant="default" size="lg" className="w-full md:w-auto">
+                      <Link href="/privacy" className="flex items-center gap-2">
+                        <Shield className="h-4 w-4" />
+                        View Full Privacy Policy
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
