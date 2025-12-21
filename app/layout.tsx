@@ -19,10 +19,10 @@ const ubuntu = Ubuntu({
 
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://mailer-toolkit.online"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL as string),
   title: {
-    default: "Mailer Toolbox - All-in-One Email & IP Tools Suite",
-    template: "%s | Mailer Toolbox",
+    default: "Mailer Toolkit - All-in-One Email & IP Tools Suite",
+    template: "%s | Mailer Toolkit",
   },
   description: "Your all-in-one suite of essential email and IP tools, designed to simplify your workflow and enhance productivity.",
   keywords: [
@@ -38,9 +38,9 @@ export const metadata: Metadata = {
     "email utilities",
     "mailer tools",
   ],
-  authors: [{ name: "Mailer Toolbox" }],
-  creator: "Mailer Toolbox",
-  publisher: "Mailer Toolbox",
+  authors: [{ name: "Mailer Toolkit" }],
+  creator: "Mohamed Barghou",
+  publisher: "Mailer Toolkit",
   formatDetection: {
     email: false,
     address: false,
@@ -54,25 +54,18 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: process.env.NEXT_PUBLIC_SITE_URL || "https://mailertoolbox.com",
-    siteName: "Mailer Toolbox",
-    title: "Mailer Toolbox - All-in-One Email & IP Tools Suite",
+    url: process.env.NEXT_PUBLIC_SITE_URL as string,
+    siteName: "Mailer Toolkit",
+    title: "Mailer Toolkit - All-in-One Email & IP Tools Suite",
     description: "Your all-in-one suite of essential email and IP tools, designed to simplify your workflow and enhance productivity.",
     images: [
       {
         url: "/AppLogo.png",
         width: 1200,
         height: 630,
-        alt: "Mailer Toolbox",
+        alt: "Mailer Toolkit",
       },
     ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Mailer Toolbox - All-in-One Email & IP Tools Suite",
-    description: "Your all-in-one suite of essential email and IP tools, designed to simplify your workflow and enhance productivity.",
-    images: ["/AppLogo.png"],
-    creator: "@mailertoolbox", // Update with your actual Twitter handle
   },
   robots: {
     index: true,
@@ -86,7 +79,7 @@ export const metadata: Metadata = {
     },
   },
   alternates: {
-    canonical: process.env.NEXT_PUBLIC_SITE_URL || "https://mailertoolbox.com",
+    canonical: process.env.NEXT_PUBLIC_SITE_URL as string,
   },
 }
 
@@ -98,17 +91,17 @@ export default function RootLayout({
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "Mailer Toolbox",
-    url: process.env.NEXT_PUBLIC_SITE_URL || "https://mailertoolbox.com",
-    logo: `${process.env.NEXT_PUBLIC_SITE_URL || "https://mailertoolbox.com"}/AppLogo.png`,
+    name: "Mailer Toolkit",
+    url: process.env.NEXT_PUBLIC_SITE_URL as string,
+    logo: `${process.env.NEXT_PUBLIC_SITE_URL as string}/AppLogo.png`,
     description: "Your all-in-one suite of essential email and IP tools, designed to simplify your workflow and enhance productivity.",
   }
 
   const websiteStructuredData = {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    name: "Mailer Toolbox",
-    url: process.env.NEXT_PUBLIC_SITE_URL || "https://mailertoolbox.com",
+    name: "Mailer Toolkit",
+    url: process.env.NEXT_PUBLIC_SITE_URL as string,
     description: "Your all-in-one suite of essential email and IP tools, designed to simplify your workflow and enhance productivity.",
   }
 
@@ -134,7 +127,7 @@ export default function RootLayout({
           <ErrorBoundary>
             <AuthProvider>
               {children}
-              <Toaster position="bottom-right" />
+              <Toaster position="top-center" richColors />
               <CookieConsentBanner />
               <FeedbackWidgetWrapper />
               <SpeedInsights />

@@ -26,7 +26,6 @@ export const validateGeminiApiKey = async (apiKey: string): Promise<{
     await generateText({
       model: googleProvider("gemini-2.5-flash"),
       prompt: "test",
-      maxTokens: 1,
     });
 
     return {

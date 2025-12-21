@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://mailertoolbox.com"
-const siteName = "Mailer Toolbox"
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL as string
+const siteName = "Mailer Toolkit"
 const defaultDescription = "Your all-in-one suite of essential email and IP tools, designed to simplify your workflow and enhance productivity."
 
 export interface PageMetadata {
@@ -59,13 +59,6 @@ export function generateMetadata({
         },
       ],
     },
-    twitter: {
-      card: "summary_large_image",
-      title: fullTitle,
-      description,
-      images: [imageUrl],
-      creator: "@mailertoolbox", // Update with your actual Twitter handle
-    },
     alternates: {
       canonical: url,
     },
@@ -82,9 +75,8 @@ export function generateStructuredData(type: "Organization" | "WebSite" | "Bread
     logo: `${siteUrl}/AppLogo.png`,
     description: defaultDescription,
     sameAs: [
-      // Add your social media profiles here
-      // "https://twitter.com/mailertoolbox",
-      // "https://linkedin.com/company/mailertoolbox",
+      "https://www.linkedin.com/in/mohamed-barghou-abb848314/",
+      "https://github.com/muhammedbarghou"
     ],
   }
 
