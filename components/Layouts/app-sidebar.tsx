@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { FileText, Inbox, Network, ImageIcon, Sparkles, PanelsRightBottom, Scissors, Layers, Home, Mail, Search, HelpCircle, ShieldAlert } from "lucide-react"
+import { FileText, Inbox, Network, ImageIcon, Sparkles, PanelsRightBottom, Scissors, Layers, Home, Mail, Search, HelpCircle, ShieldAlert, SplitSquareHorizontal } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -44,6 +44,11 @@ const toolCategories = [
         href: "/eml-text-extractor",
         title: "Merge Tool",
         icon: Scissors,
+      },
+      {
+        href: "/text-file-mapper",
+        title: "Text File Mapper",
+        icon: SplitSquareHorizontal,
       },
       {
         href: "/email-source-separator",
