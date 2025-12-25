@@ -9,7 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.1",
     "@ai-sdk/google": "^2.0.25",
+    "@ai-sdk/openai": "^3.0.1",
     "@emailjs/browser": "^4.4.1",
     "@emailjs/nodejs": "^5.0.2",
     "@radix-ui/react-avatar": "^1.1.11",

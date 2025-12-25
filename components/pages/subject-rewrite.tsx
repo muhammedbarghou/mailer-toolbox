@@ -21,7 +21,22 @@ import {
   Target,
   CloudLightning as Lightning,
 } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
+import type { ApiKeyProvider } from "@/lib/api-keys"
+import {
+  getAvailableModels,
+  getDefaultModel,
+  getModelDisplayName,
+  type AIModel,
+} from "@/lib/ai-providers"
 
 interface RewrittenSubject {
   original: string
@@ -37,6 +52,13 @@ const SubjectRewrite = () => {
     remaining: number
     resetAt: number
   } | null>(null)
+  const [provider, setProvider] = useState<ApiKeyProvider>("gemini")
+  const [model, setModel] = useState<AIModel>(getDefaultModel("gemini"))
+
+  const handleProviderChange = (newProvider: ApiKeyProvider) => {
+    setProvider(newProvider)
+    setModel(getDefaultModel(newProvider))
+  }
 
   const handleRewrite = async () => {
     if (!subjectsInput.trim()) {
@@ -64,7 +86,7 @@ const SubjectRewrite = () => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ subjects }),
+        body: JSON.stringify({ subjects, provider, model }),
       })
 
       if (!response.ok) {
@@ -172,7 +194,7 @@ const SubjectRewrite = () => {
           <div className="flex items-center justify-center gap-3 pt-4 flex-wrap">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
               <Zap className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium">Powered by Gemini 2.5 Flash</span>
+              <span className="text-sm font-medium">Powered by {getModelDisplayName(model)}</span>
             </div>
             {rateLimitInfo && (
               <div
@@ -190,6 +212,57 @@ const SubjectRewrite = () => {
                 </span>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* AI Model Selection */}
+        <div className="relative z-20 mx-auto flex w-full max-w-3xl flex-col gap-4 rounded-2xl border border-border/60 bg-muted/40 p-4 shadow-sm backdrop-blur-sm">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="provider">AI Provider</Label>
+              <Select
+                value={provider}
+                onValueChange={(value) => handleProviderChange(value as ApiKeyProvider)}
+                disabled={isLoading}
+              >
+                <SelectTrigger id="provider">
+                  <SelectValue placeholder="Select provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gemini">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4" />
+                      <span>Google Gemini</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="openai">
+                    <span>OpenAI</span>
+                  </SelectItem>
+                  <SelectItem value="anthropic">
+                    <span>Anthropic</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="model">Model</Label>
+              <Select
+                value={model}
+                onValueChange={(value) => setModel(value as AIModel)}
+                disabled={isLoading}
+              >
+                <SelectTrigger id="model">
+                  <SelectValue placeholder="Select model" />
+                </SelectTrigger>
+                <SelectContent>
+                  {getAvailableModels(provider).map((availableModel) => (
+                    <SelectItem key={availableModel} value={availableModel}>
+                      {getModelDisplayName(availableModel)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 

@@ -296,20 +296,14 @@ const ApiKeysSection = () => {
                       <span>Google Gemini</span>
                     </div>
                   </SelectItem>
-                  <SelectItem value="openai" disabled>
+                  <SelectItem value="openai">
                     <div className="flex items-center gap-2">
                       <span>OpenAI</span>
-                      <span className="text-xs text-muted-foreground">
-                        (Coming soon)
-                      </span>
                     </div>
                   </SelectItem>
-                  <SelectItem value="anthropic" disabled>
+                  <SelectItem value="anthropic">
                     <div className="flex items-center gap-2">
                       <span>Anthropic</span>
-                      <span className="text-xs text-muted-foreground">
-                        (Coming soon)
-                      </span>
                     </div>
                   </SelectItem>
                 </SelectContent>
@@ -347,6 +341,34 @@ const ApiKeysSection = () => {
                   className="text-primary hover:underline"
                 >
                   Google AI Studio
+                </a>
+              </p>
+            )}
+            {provider === "openai" && (
+              <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                <ExternalLink className="h-3 w-3" />
+                Get your OpenAI API key from{" "}
+                <a
+                  href="https://platform.openai.com/api-keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  OpenAI Platform
+                </a>
+              </p>
+            )}
+            {provider === "anthropic" && (
+              <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                <ExternalLink className="h-3 w-3" />
+                Get your Anthropic API key from{" "}
+                <a
+                  href="https://console.anthropic.com/settings/keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  Anthropic Console
                 </a>
               </p>
             )}

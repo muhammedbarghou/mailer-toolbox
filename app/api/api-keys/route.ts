@@ -5,7 +5,7 @@ import {
   createUserApiKey,
   type ApiKeyProvider,
 } from "@/lib/api-keys";
-import { validateGeminiApiKey } from "@/lib/api-key-validation";
+import { validateApiKey } from "@/lib/api-key-validation";
 import { updateApiKeyValidation } from "@/lib/api-keys";
 
 /**
@@ -117,19 +117,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate API key in real-time (for Gemini)
-    if (provider === "gemini") {
-      const validation = await validateGeminiApiKey(api_key.trim());
-      
-      if (!validation.valid) {
-        return NextResponse.json(
-          {
-            error: "API key validation failed",
-            validation_error: validation.error,
-          },
-          { status: 400 }
-        );
-      }
+    // Validate API key in real-time for all providers
+    const validation = await validateApiKey(provider as ApiKeyProvider, api_key.trim());
+    
+    if (!validation.valid) {
+      return NextResponse.json(
+        {
+          error: "API key validation failed",
+          validation_error: validation.error,
+        },
+        { status: 400 }
+      );
     }
 
     // Create the API key
@@ -149,9 +147,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update validation status if validation passed
-    if (provider === "gemini") {
-      await updateApiKeyValidation(user.id, newKey.id, "valid");
-    }
+    await updateApiKeyValidation(user.id, newKey.id, "valid");
 
     // Remove encrypted key from response
     const { encrypted_api_key, ...sanitizedKey } = newKey;

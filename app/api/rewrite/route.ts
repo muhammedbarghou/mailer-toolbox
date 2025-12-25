@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Redis } from "@upstash/redis";
-import { sha256 } from "js-sha256";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText } from "ai";
 import { createClient } from "@/lib/supabase/server";
-import { getUserApiKey } from "@/lib/api-keys";
+import { getUserApiKey, type ApiKeyProvider } from "@/lib/api-keys";
+import {
+  generateTextWithProvider,
+  getDefaultModel,
+  type AIModel,
+} from "@/lib/ai-providers";
+import {
+  getCacheKey,
+  getCachedContent,
+  setCachedContent,
+} from "@/lib/prompt-cache";
 
 // System prompt for email rewriting
 const SYSTEM_PROMPT = `EXPERT EMAIL HTML REWRITER: COMPLETE SPAM FILTER BYPASS SYSTEM
@@ -320,19 +326,7 @@ Complete, ready-to-deploy structure with proper DOCTYPE, meta tags, and table-ba
 
 IMPORTANT: Return ONLY the rewritten HTML email code. Do not include any explanations, markdown formatting, or additional text. The response must be pure HTML that can be directly used in an email client.`;
 
-// Get environment variables
-const PROMPT_VERSION = process.env.PROMPT_VERSION || "v1.0";
-const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
-const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-// Note: We do NOT use GOOGLE_API_KEY from environment - we require users to provide their own API key
-
-// Initialize Redis client
-const redis = REDIS_URL && REDIS_TOKEN
-  ? new Redis({
-      url: REDIS_URL,
-      token: REDIS_TOKEN,
-    })
-  : null;
+// Note: We do NOT use API keys from environment - we require users to provide their own API keys
 
 export async function POST(request: NextRequest) {
   try {
@@ -347,7 +341,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { html, theme } = body;
+    const { html, theme, provider = "gemini", model } = body;
 
     if (!html || typeof html !== "string") {
       return NextResponse.json(
@@ -356,30 +350,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const themeKey: string =
+    // Validate provider
+    const validProviders: ApiKeyProvider[] = ["gemini", "openai", "anthropic"];
+    if (!validProviders.includes(provider)) {
+      return NextResponse.json(
+        { error: `Invalid provider. Must be one of: ${validProviders.join(", ")}` },
+        { status: 400 }
+      );
+    }
+
+    // Get model or use default for provider
+    const selectedModel: AIModel = model || getDefaultModel(provider);
+
+    const themeKey: string | undefined =
       typeof theme === "string" && theme.trim().length > 0
         ? theme.trim()
-        : "default";
+        : undefined;
 
-    // Generate cache key
-    const cacheKeyInput = `${PROMPT_VERSION}${SYSTEM_PROMPT}${themeKey}${html}`;
-    const cacheKeyHash = sha256(cacheKeyInput);
-    const cacheKey = `email-rewrite:${PROMPT_VERSION}:${cacheKeyHash}`;
+    // Generate cache key using optimized caching system
+    const { cacheKey } = await getCacheKey(
+      provider,
+      selectedModel,
+      SYSTEM_PROMPT,
+      html,
+      themeKey
+    );
 
-    // Check Redis cache first
-    if (redis) {
-      try {
-        const cached = await redis.get<string>(cacheKey);
-        if (cached) {
-          return NextResponse.json({
-            html: cached,
-            cached: true,
-          });
-        }
-      } catch (error) {
-        console.error("Redis cache read error:", error);
-        // Continue to AI rewrite if cache fails
-      }
+    // Check cache first
+    const cached = await getCachedContent(cacheKey);
+    if (cached) {
+      return NextResponse.json({
+        html: cached,
+        cached: true,
+      });
     }
 
     // Get API key: MUST use user's key if authenticated, never fall back to environment variable
@@ -412,19 +415,20 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // MUST get user's API key - no fallback to environment variable
-      const userApiKey = await getUserApiKey(user.id, "gemini");
+      // MUST get user's API key for the selected provider - no fallback to environment variable
+      const userApiKey = await getUserApiKey(user.id, provider);
       if (!userApiKey) {
+        const providerName = provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
         return NextResponse.json(
           { 
-            error: "No API key configured. Please add your Gemini API key in Settings to use this feature." 
+            error: `No API key configured. Please add your ${providerName} API key in Settings to use this feature.` 
           },
           { status: 400 }
         );
       }
 
       apiKeyToUse = userApiKey;
-      console.log(`Using user API key for user ${user.id}`);
+      console.log(`Using user ${provider} API key for user ${user.id}`);
     } catch (error) {
       console.error("Error getting user API key:", error);
       return NextResponse.json(
@@ -437,46 +441,48 @@ export async function POST(request: NextRequest) {
 
     // Validate API key is available
     if (!apiKeyToUse) {
+      const providerName = provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
       return NextResponse.json(
         { 
-          error: "No API key configured. Please add your Gemini API key in Settings." 
+          error: `No API key configured. Please add your ${providerName} API key in Settings.` 
         },
         { status: 400 }
       );
     }
 
-    // Create Google provider with the API key
-    const googleProvider = createGoogleGenerativeAI({
-      apiKey: apiKeyToUse,
-    });
-
     // Build theme-specific styling instructions
     let themeInstruction = "";
 
-    const isHexColor =
-      themeKey.startsWith("#") &&
-      (themeKey.length === 4 || themeKey.length === 7);
-
-    if (isHexColor) {
-      themeInstruction = `Use ${themeKey} as the primary brand color for the rewritten email. Apply it thoughtfully to buttons, key links, and accent elements, and derive complementary lighter/darker variants as needed. Ensure WCAG-compliant contrast against backgrounds and keep the overall palette clean, professional, and inbox-safe.`;
-    } else if (themeKey === "brand-blue") {
+    if (!themeKey) {
+      // No theme provided - preserve original colors
       themeInstruction =
-        "Apply a modern blue SaaS-style color theme to the rewritten email. Use a deep, accessible blue as the primary color (for example around #1D4ED8) with lighter blue accents and plenty of neutral background space. Ensure strong contrast and a clean, product-focused feel while remaining professional and inbox-safe.";
-    } else if (themeKey === "fresh-green") {
-      themeInstruction =
-        "Apply a fresh green color theme to the rewritten email. Use an accessible emerald or teal-like primary color (for example around #059669) with subtle neutrals. The overall feel should be optimistic, growth-oriented, and suitable for lifecycle, onboarding, or progress-update emails.";
-    } else if (themeKey === "deep-purple") {
-      themeInstruction =
-        "Apply a deep purple color theme to the rewritten email. Use a rich, saturated purple primary (for example around #7C3AED) with complementary subtle accent colors. The design should feel premium and creative while still remaining highly legible and compliant with accessibility and deliverability best practices.";
-    } else if (themeKey === "warm-amber") {
-      themeInstruction =
-        "Apply a warm amber or orange-toned color theme to the rewritten email. Use a warm, friendly amber primary (for example around #F59E0B) and soft supporting neutrals. The layout should feel welcoming and editorial, ideal for newsletters or community announcements, while preserving strong contrast.";
-    } else if (themeKey === "neutral-slate") {
-      themeInstruction =
-        "Apply a neutral slate and gray color theme to the rewritten email. Use subtle, content-first neutrals (for example multiple shades around #111827 to #E5E7EB) and very minimal accent colors. The email should feel highly professional and minimal, ideal for transactional or system notifications.";
+        "Preserve the original color scheme from the HTML email. Maintain the same color palette, including primary colors, background colors, text colors, and accent colors. Only adjust colors if absolutely necessary for accessibility or deliverability compliance, but otherwise keep the original color scheme intact.";
     } else {
-      themeInstruction =
-        "Apply a cohesive, accessible color palette that feels professional and modern. You may adjust colors from the original HTML as needed to improve readability and deliverability.";
+      const isHexColor =
+        themeKey.startsWith("#") &&
+        (themeKey.length === 4 || themeKey.length === 7);
+
+      if (isHexColor) {
+        themeInstruction = `Use ${themeKey} as the primary brand color for the rewritten email. Apply it thoughtfully to buttons, key links, and accent elements, and derive complementary lighter/darker variants as needed. Ensure WCAG-compliant contrast against backgrounds and keep the overall palette clean, professional, and inbox-safe.`;
+      } else if (themeKey === "brand-blue") {
+        themeInstruction =
+          "Apply a modern blue SaaS-style color theme to the rewritten email. Use a deep, accessible blue as the primary color (for example around #1D4ED8) with lighter blue accents and plenty of neutral background space. Ensure strong contrast and a clean, product-focused feel while remaining professional and inbox-safe.";
+      } else if (themeKey === "fresh-green") {
+        themeInstruction =
+          "Apply a fresh green color theme to the rewritten email. Use an accessible emerald or teal-like primary color (for example around #059669) with subtle neutrals. The overall feel should be optimistic, growth-oriented, and suitable for lifecycle, onboarding, or progress-update emails.";
+      } else if (themeKey === "deep-purple") {
+        themeInstruction =
+          "Apply a deep purple color theme to the rewritten email. Use a rich, saturated purple primary (for example around #7C3AED) with complementary subtle accent colors. The design should feel premium and creative while still remaining highly legible and compliant with accessibility and deliverability best practices.";
+      } else if (themeKey === "warm-amber") {
+        themeInstruction =
+          "Apply a warm amber or orange-toned color theme to the rewritten email. Use a warm, friendly amber primary (for example around #F59E0B) and soft supporting neutrals. The layout should feel welcoming and editorial, ideal for newsletters or community announcements, while preserving strong contrast.";
+      } else if (themeKey === "neutral-slate") {
+        themeInstruction =
+          "Apply a neutral slate and gray color theme to the rewritten email. Use subtle, content-first neutrals (for example multiple shades around #111827 to #E5E7EB) and very minimal accent colors. The email should feel highly professional and minimal, ideal for transactional or system notifications.";
+      } else {
+        themeInstruction =
+          "Apply a cohesive, accessible color palette that feels professional and modern. You may adjust colors from the original HTML as needed to improve readability and deliverability.";
+      }
     }
 
     const finalPrompt = `${themeInstruction}
@@ -485,29 +491,34 @@ Here is the original HTML email that must be rewritten according to the full sys
 
 ${html}`;
 
-    // Call Google Gemini API with retry logic for rate limits
+    // Call AI provider with retry logic for rate limits
     let result;
     const maxRetries = 3;
     let lastError: any = null;
+    const providerName = provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        result = await generateText({
-          model: googleProvider("gemini-2.5-flash"),
-          system: SYSTEM_PROMPT,
-          prompt: finalPrompt,
-          temperature: 0.7,
-        });
+        result = await generateTextWithProvider(
+          provider,
+          selectedModel,
+          apiKeyToUse,
+          {
+            system: SYSTEM_PROMPT,
+            prompt: finalPrompt,
+            temperature: 0.7,
+          }
+        );
         // Success - break out of retry loop
         break;
       } catch (error: any) {
         lastError = error;
-        console.error(`Google Gemini API error (attempt ${attempt + 1}/${maxRetries + 1}):`, error);
+        console.error(`${providerName} API error (attempt ${attempt + 1}/${maxRetries + 1}):`, error);
         
-        // Handle specific Google API errors that shouldn't be retried
+        // Handle specific API errors that shouldn't be retried
         if (error?.statusCode === 401 || error?.status === 401) {
           return NextResponse.json(
-            { error: `Invalid Google API key (source: ${apiKeySource}). Please check your API key in Settings.` },
+            { error: `Invalid ${providerName} API key. Please check your API key in Settings.` },
             { status: 500 }
           );
         }
@@ -522,7 +533,7 @@ ${html}`;
             continue; // Retry
           } else {
             return NextResponse.json(
-              { error: "The Gemini model is currently overloaded. Please try again in a few moments." },
+              { error: `The ${providerName} model is currently overloaded. Please try again in a few moments.` },
               { status: 503 }
             );
           }
@@ -538,7 +549,7 @@ ${html}`;
             continue; // Retry
           } else {
             return NextResponse.json(
-              { error: `Google API quota exceeded or rate limit reached (using ${apiKeySource} API key). Please check your billing and try again later.` },
+              { error: `${providerName} API quota exceeded or rate limit reached. Please check your billing and try again later.` },
               { status: 500 }
             );
           }
@@ -554,16 +565,16 @@ ${html}`;
             continue; // Retry
           } else {
             return NextResponse.json(
-              { error: "Google API is temporarily unavailable. Please try again later." },
+              { error: `${providerName} API is temporarily unavailable. Please try again later.` },
               { status: 500 }
             );
           }
         }
 
         // For other errors, don't retry
-        const errorMessage = error?.message || "Google Gemini API request failed";
+        const errorMessage = error?.message || `${providerName} API request failed`;
         return NextResponse.json(
-          { error: `Google Gemini API error: ${errorMessage}` },
+          { error: `${providerName} API error: ${errorMessage}` },
           { status: 500 }
         );
       }
@@ -573,18 +584,18 @@ ${html}`;
     if (!result) {
       if (lastError?.message?.includes("overloaded") || lastError?.message?.toLowerCase().includes("model is overloaded")) {
         return NextResponse.json(
-          { error: "The Gemini model is currently overloaded. Please try again in a few moments." },
+          { error: `The ${providerName} model is currently overloaded. Please try again in a few moments.` },
           { status: 503 }
         );
       }
       if (lastError?.statusCode === 429 || lastError?.status === 429 || lastError?.message?.includes("quota")) {
         return NextResponse.json(
-          { error: `Google API quota exceeded or rate limit reached (using ${apiKeySource} API key). Please try again in a few moments.` },
+          { error: `${providerName} API quota exceeded or rate limit reached. Please try again in a few moments.` },
           { status: 500 }
         );
       }
       return NextResponse.json(
-        { error: "Failed to connect to Google Gemini API after multiple attempts. Please try again later." },
+        { error: `Failed to connect to ${providerName} API after multiple attempts. Please try again later.` },
         { status: 500 }
       );
     }
@@ -598,15 +609,8 @@ ${html}`;
       );
     }
 
-    // Cache the result in Redis
-    if (redis) {
-      try {
-        await redis.set(cacheKey, rewrittenHtml, { ex: 86400 }); // 24 hours TTL
-      } catch (error) {
-        console.error("Redis cache write error:", error);
-        // Continue even if caching fails
-      }
-    }
+    // Cache the result using optimized caching system
+    await setCachedContent(cacheKey, rewrittenHtml);
 
     return NextResponse.json({
       html: rewrittenHtml,

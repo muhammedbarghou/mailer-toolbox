@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Redis } from "@upstash/redis";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText } from "ai";
 import { createClient } from "@/lib/supabase/server";
-import { getUserApiKey } from "@/lib/api-keys";
+import { getUserApiKey, type ApiKeyProvider } from "@/lib/api-keys";
+import {
+  generateTextWithProvider,
+  getDefaultModel,
+  type AIModel,
+} from "@/lib/ai-providers";
 
 // Read the system prompt from the file
 const getSystemPrompt = () => {
@@ -41,17 +43,18 @@ Remember: You are processing ONE subject line and must return EXACTLY 20 alterna
 
 const SYSTEM_PROMPT = getSystemPrompt();
 
+import { Redis } from "@upstash/redis";
+
 // Get environment variables
-const PROMPT_VERSION = process.env.PROMPT_VERSION || "v1.0";
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-// Note: We do NOT use GOOGLE_API_KEY from environment - we require users to provide their own API key
+// Note: We do NOT use API keys from environment - we require users to provide their own API keys
 
 // Rate limit configuration
 const RATE_LIMIT_MAX = 5; // 5 tries per hour
 const RATE_LIMIT_WINDOW = 3600; // 1 hour in seconds
 
-// Initialize Redis client
+// Initialize Redis client for rate limiting
 const redis = REDIS_URL && REDIS_TOKEN
   ? new Redis({
       url: REDIS_URL,
@@ -134,7 +137,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { subjects } = body;
+    const { subjects, provider = "gemini", model } = body;
 
     if (!subjects || !Array.isArray(subjects) || subjects.length === 0) {
       return NextResponse.json(
@@ -151,9 +154,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate provider
+    const validProviders: ApiKeyProvider[] = ["gemini", "openai", "anthropic"];
+    if (!validProviders.includes(provider)) {
+      return NextResponse.json(
+        { error: `Invalid provider. Must be one of: ${validProviders.join(", ")}` },
+        { status: 400 }
+      );
+    }
+
+    // Get model or use default for provider
+    const selectedModel: AIModel = model || getDefaultModel(provider);
+
     // Get API key: MUST use user's key if authenticated, never fall back to environment variable
     let apiKeyToUse: string | null = null;
-    let apiKeySource = "user";
     
     try {
       const supabase = await createClient();
@@ -181,19 +195,20 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // MUST get user's API key - no fallback to environment variable
-      const userApiKey = await getUserApiKey(user.id, "gemini");
+      // MUST get user's API key for the selected provider - no fallback to environment variable
+      const userApiKey = await getUserApiKey(user.id, provider);
       if (!userApiKey) {
+        const providerName = provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
         return NextResponse.json(
           { 
-            error: "No API key configured. Please add your Gemini API key in Settings to use this feature." 
+            error: `No API key configured. Please add your ${providerName} API key in Settings to use this feature.` 
           },
           { status: 400 }
         );
       }
 
       apiKeyToUse = userApiKey;
-      console.log(`Using user API key for user ${user.id}`);
+      console.log(`Using user ${provider} API key for user ${user.id}`);
     } catch (error) {
       console.error("Error getting user API key:", error);
       return NextResponse.json(
@@ -206,9 +221,10 @@ export async function POST(request: NextRequest) {
 
     // Validate API key is available
     if (!apiKeyToUse) {
+      const providerName = provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
       return NextResponse.json(
         { 
-          error: "No API key configured. Please add your Gemini API key in Settings." 
+          error: `No API key configured. Please add your ${providerName} API key in Settings.` 
         },
         { status: 400 }
       );
@@ -268,32 +284,32 @@ MANDATORY REQUIREMENTS:
 - All 20 alternatives should be optimized for deliverability, engagement, and spam filter avoidance
 - Count your alternatives: you must provide exactly 20, not 19, not 21, but exactly 20`;
 
-      // Create Google provider with the API key
-      const googleProvider = createGoogleGenerativeAI({
-        apiKey: apiKeyToUse!,
-      });
-
-      // Call Google Gemini API with retry logic
+      // Call AI provider with retry logic
       let result;
       const maxRetries = 3;
       let lastError: any = null;
+      const providerName = provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-          result = await generateText({
-            model: googleProvider("gemini-2.5-flash"),
-            system: SYSTEM_PROMPT,
-            prompt: userPrompt,
-            temperature: 0.7,
-          });
+          result = await generateTextWithProvider(
+            provider,
+            selectedModel,
+            apiKeyToUse!,
+            {
+              system: SYSTEM_PROMPT,
+              prompt: userPrompt,
+              temperature: 0.7,
+            }
+          );
           break;
         } catch (error: any) {
           lastError = error;
-          console.error(`Google Gemini API error for subject ${subjectNumber} (attempt ${attempt + 1}/${maxRetries + 1}):`, error);
+          console.error(`${providerName} API error for subject ${subjectNumber} (attempt ${attempt + 1}/${maxRetries + 1}):`, error);
           
           if (error?.statusCode === 401 || error?.status === 401) {
             return NextResponse.json(
-              { error: `Invalid Google API key (source: ${apiKeySource}). Please check your API key in Settings or your GOOGLE_GENERATIVE_AI_API_KEY environment variable.` },
+              { error: `Invalid ${providerName} API key. Please check your API key in Settings.` },
               { status: 500 }
             );
           }
@@ -308,7 +324,7 @@ MANDATORY REQUIREMENTS:
               continue;
             } else {
               return NextResponse.json(
-                { error: "The Gemini model is currently overloaded. Please try again in a few moments." },
+                { error: `The ${providerName} model is currently overloaded. Please try again in a few moments.` },
                 { status: 503 }
               );
             }
@@ -322,7 +338,7 @@ MANDATORY REQUIREMENTS:
               continue;
             } else {
               return NextResponse.json(
-                { error: `Google API quota exceeded or rate limit reached (using ${apiKeySource} API key). Please check your billing and try again later.` },
+                { error: `${providerName} API quota exceeded or rate limit reached. Please check your billing and try again later.` },
                 { status: 500 }
               );
             }
@@ -336,15 +352,15 @@ MANDATORY REQUIREMENTS:
               continue;
             } else {
               return NextResponse.json(
-                { error: "Google API is temporarily unavailable. Please try again later." },
+                { error: `${providerName} API is temporarily unavailable. Please try again later.` },
                 { status: 500 }
               );
             }
           }
 
-          const errorMessage = error?.message || "Google Gemini API request failed";
+          const errorMessage = error?.message || `${providerName} API request failed`;
           return NextResponse.json(
-            { error: `Google Gemini API error: ${errorMessage}` },
+            { error: `${providerName} API error: ${errorMessage}` },
             { status: 500 }
           );
         }
@@ -353,18 +369,18 @@ MANDATORY REQUIREMENTS:
       if (!result) {
         if (lastError?.message?.includes("overloaded") || lastError?.message?.toLowerCase().includes("model is overloaded")) {
           return NextResponse.json(
-            { error: "The Gemini model is currently overloaded. Please try again in a few moments." },
+            { error: `The ${providerName} model is currently overloaded. Please try again in a few moments.` },
             { status: 503 }
           );
         }
         if (lastError?.statusCode === 429 || lastError?.status === 429 || lastError?.message?.includes("quota")) {
           return NextResponse.json(
-            { error: `Google API quota exceeded or rate limit reached (using ${apiKeySource} API key). Please try again in a few moments.` },
+            { error: `${providerName} API quota exceeded or rate limit reached. Please try again in a few moments.` },
             { status: 500 }
           );
         }
         return NextResponse.json(
-          { error: "Failed to connect to Google Gemini API after multiple attempts. Please try again later." },
+          { error: `Failed to connect to ${providerName} API after multiple attempts. Please try again later.` },
           { status: 500 }
         );
       }

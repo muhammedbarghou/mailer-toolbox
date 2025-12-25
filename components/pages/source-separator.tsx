@@ -443,22 +443,62 @@ const EmailSourceSeparator = () => {
 
       try {
         const emailContent = await file.text()
-        const { header, plainText, html } = parseEmail(emailContent)
 
-        setProcessedFiles((prev) =>
-          prev.map((pf) =>
-            pf.id === fileWrapper.id
-              ? {
-                  ...pf,
-                  originalContent: emailContent,
-                  header,
-                  plainText,
-                  html,
-                  status: "completed",
-                }
-              : pf,
-          ),
-        )
+        // Try API parsing first
+        try {
+          const response = await fetch("/api/eml-parse", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ emailContent }),
+          })
+
+          if (response.ok) {
+            const parsed = await response.json()
+
+            // Use API parsed data
+            const header = parsed.rawHeaders || ""
+            const plainText = parsed.text || ""
+            const html = parsed.html || ""
+
+            setProcessedFiles((prev) =>
+              prev.map((pf) =>
+                pf.id === fileWrapper.id
+                  ? {
+                      ...pf,
+                      originalContent: emailContent,
+                      header,
+                      plainText,
+                      html,
+                      status: "completed",
+                    }
+                  : pf,
+              ),
+            )
+          } else {
+            // API failed, fallback to manual parsing
+            throw new Error("API parsing failed")
+          }
+        } catch (apiError) {
+          // Fallback to manual parsing if API fails
+          const { header, plainText, html } = parseEmail(emailContent)
+
+          setProcessedFiles((prev) =>
+            prev.map((pf) =>
+              pf.id === fileWrapper.id
+                ? {
+                    ...pf,
+                    originalContent: emailContent,
+                    header,
+                    plainText,
+                    html,
+                    status: "completed",
+                  }
+                : pf,
+            ),
+          )
+        }
       } catch (error) {
         setProcessedFiles((prev) =>
           prev.map((pf) =>

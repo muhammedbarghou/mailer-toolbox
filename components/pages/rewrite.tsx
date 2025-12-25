@@ -24,7 +24,23 @@ import {
   FileCode,
   Eye,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import type { ApiKeyProvider } from "@/lib/api-keys";
+import {
+  getAvailableModels,
+  getDefaultModel,
+  getModelDisplayName,
+  type AIModel,
+} from "@/lib/ai-providers";
 
 const Rewrite = () => {
   const [htmlInput, setHtmlInput] = useState("");
@@ -32,12 +48,20 @@ const Rewrite = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isCached, setIsCached] = useState(false);
   const [primaryColor, setPrimaryColor] = useState<string>("#1D4ED8");
+  const [useCustomColor, setUseCustomColor] = useState(false);
+  const [provider, setProvider] = useState<ApiKeyProvider>("gemini");
+  const [model, setModel] = useState<AIModel>(getDefaultModel("gemini"));
 
   const handleChangeColor = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (isLoading) {
       return;
     }
     setPrimaryColor(event.target.value);
+  };
+
+  const handleProviderChange = (newProvider: ApiKeyProvider) => {
+    setProvider(newProvider);
+    setModel(getDefaultModel(newProvider));
   };
 
   const handleRewrite = async () => {
@@ -56,7 +80,12 @@ const Rewrite = () => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ html: htmlInput, theme: primaryColor }),
+        body: JSON.stringify({
+          html: htmlInput,
+          theme: useCustomColor ? primaryColor : undefined,
+          provider,
+          model,
+        }),
       });
 
       if (!response.ok) {
@@ -145,7 +174,7 @@ const Rewrite = () => {
             <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
               <Zap className="h-4 w-4 text-primary" />
               <span className="text-sm font-medium">
-                Powered by Gemini 2.5 Flash
+                Powered by {getModelDisplayName(model)}
               </span>
             </div>
             {isCached && (
@@ -159,39 +188,114 @@ const Rewrite = () => {
           </div>
         </div>
 
-        <div className="relative z-20 mx-auto flex w-full max-w-3xl flex-col gap-3 rounded-2xl border border-border/60 bg-muted/40 p-4 shadow-sm backdrop-blur-sm pointer-events-auto">
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Primary color</p>
-              <p className="text-xs text-muted-foreground">
-                Choose the main brand color you want the rewritten HTML email to
-                use for buttons, accents, and key highlights. Layout and content
-                semantics are preserved.
-              </p>
+        <div className="relative z-20 mx-auto flex w-full max-w-3xl flex-col gap-4 rounded-2xl border border-border/60 bg-muted/40 p-4 shadow-sm backdrop-blur-sm pointer-events-auto">
+          {/* AI Model Selection */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="provider">AI Provider</Label>
+              <Select
+                value={provider}
+                onValueChange={(value) => handleProviderChange(value as ApiKeyProvider)}
+                disabled={isLoading}
+              >
+                <SelectTrigger id="provider">
+                  <SelectValue placeholder="Select provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gemini">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4" />
+                      <span>Google Gemini</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="openai">
+                    <span>OpenAI</span>
+                  </SelectItem>
+                  <SelectItem value="anthropic">
+                    <span>Anthropic</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground">
-              <span className="hidden md:inline">Hex:</span>
-              <span className="font-semibold text-primary">{primaryColor}</span>
+            <div className="space-y-2">
+              <Label htmlFor="model">Model</Label>
+              <Select
+                value={model}
+                onValueChange={(value) => setModel(value as AIModel)}
+                disabled={isLoading}
+              >
+                <SelectTrigger id="model">
+                  <SelectValue placeholder="Select model" />
+                </SelectTrigger>
+                <SelectContent>
+                  {getAvailableModels(provider).map((availableModel) => (
+                    <SelectItem key={availableModel} value={availableModel}>
+                      {getModelDisplayName(availableModel)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
-          <label className="inline-flex w-fit items-center gap-3 rounded-full border border-border/70 bg-background/60 px-3 py-1.5 text-xs">
-            <span className="text-[11px] text-muted-foreground">
-              Pick a color
-            </span>
-            <input
-              type="color"
-              value={primaryColor}
-              onChange={handleChangeColor}
-              aria-label="Choose primary color for rewritten email"
-              className="h-7 w-10 cursor-pointer rounded-md border border-border bg-transparent p-0"
-              disabled={isLoading}
-            />
-          </label>
-          <p className="text-[11px] text-muted-foreground">
-            The AI will adapt buttons, backgrounds, and accents to your chosen
-            primary color while still following all deliverability and
-            accessibility best practices from the rewrite engine.
-          </p>
+
+          {/* Primary Color Selection */}
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="use-custom-color"
+                checked={useCustomColor}
+                onChange={(e) => setUseCustomColor(e.target.checked)}
+                disabled={isLoading}
+              />
+              <Label
+                htmlFor="use-custom-color"
+                className="text-sm font-medium cursor-pointer"
+              >
+                Customize primary color (optional)
+              </Label>
+            </div>
+            {useCustomColor && (
+              <div className="space-y-3 pl-6 border-l-2 border-border/50">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Primary color</p>
+                    <p className="text-xs text-muted-foreground">
+                      Choose the main brand color you want the rewritten HTML email to
+                      use for buttons, accents, and key highlights. Layout and content
+                      semantics are preserved.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground">
+                    <span className="hidden md:inline">Hex:</span>
+                    <span className="font-semibold text-primary">{primaryColor}</span>
+                  </div>
+                </div>
+                <label className="inline-flex w-fit items-center gap-3 rounded-full border border-border/70 bg-background/60 px-3 py-1.5 text-xs">
+                  <span className="text-[11px] text-muted-foreground">
+                    Pick a color
+                  </span>
+                  <input
+                    type="color"
+                    value={primaryColor}
+                    onChange={handleChangeColor}
+                    aria-label="Choose primary color for rewritten email"
+                    className="h-7 w-10 cursor-pointer rounded-md border border-border bg-transparent p-0"
+                    disabled={isLoading}
+                  />
+                </label>
+                <p className="text-[11px] text-muted-foreground">
+                  The AI will adapt buttons, backgrounds, and accents to your chosen
+                  primary color while still following all deliverability and
+                  accessibility best practices from the rewrite engine.
+                </p>
+              </div>
+            )}
+            {!useCustomColor && (
+              <p className="text-[11px] text-muted-foreground pl-6">
+                Original colors from your HTML email will be preserved in the rewritten version.
+              </p>
+            )}
+          </div>
         </div>
       </div>
 

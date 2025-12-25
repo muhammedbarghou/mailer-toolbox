@@ -31,11 +31,37 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Format headers as RFC 2822 string for reconstruction
+    const headerLines: string[] = []
+    if (parsed.headers) {
+      parsed.headers.forEach((value, key) => {
+        // Format key with proper capitalization (Title-Case)
+        const formattedKey = key
+          .split("-")
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join("-")
+
+        // Handle header values
+        let headerValue = ""
+        if (Array.isArray(value)) {
+          headerValue = value.map((v) => (typeof v === "string" ? v : String(v))).join(", ")
+        } else if (value && typeof value === "object") {
+          headerValue = String(value)
+        } else {
+          headerValue = String(value || "")
+        }
+
+        headerLines.push(`${formattedKey}: ${headerValue}`)
+      })
+    }
+    const rawHeaders = headerLines.join("\n")
+
     // Return structured data
     return NextResponse.json({
       text: parsed.text || "",
       html: parsed.html || "",
       headers,
+      rawHeaders, // RFC 2822 formatted headers string for reconstruction
       subject: parsed.subject || "",
       from: parsed.from?.text || "",
       to: parsed.to?.text || "",
