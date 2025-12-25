@@ -22,92 +22,8 @@ import {
   CheckCircle2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-
-const tools = [
-  {
-    href: "/rewrite",
-    title: "AI Email Rewriter",
-    description: "Transform HTML emails to bypass spam filters and improve deliverability while maintaining your original message and design.",
-    icon: Sparkles,
-    color: "from-purple-500/10 to-pink-500/10",
-    iconColor: "text-purple-500",
-    borderColor: "border-purple-500/20",
-  },
-  {
-    href: "/header-processor",
-    title: "Email Header Processor",
-    description: "Process and analyze email headers in batch mode. Remove tracking headers, sanitize sender information, and optimize headers for better deliverability.",
-    icon: Inbox,
-    color: "from-blue-500/10 to-cyan-500/10",
-    iconColor: "text-blue-500",
-    borderColor: "border-blue-500/20",
-  },
-  {
-    href: "/eml-to-txt-converter",
-    title: "EML to TXT Converter",
-    description: "Convert multiple email files (.eml) to plain text format with timestamps. Extract text content from email files quickly and efficiently.",
-    icon: FileText,
-    color: "from-green-500/10 to-emerald-500/10",
-    iconColor: "text-green-500",
-    borderColor: "border-green-500/20",
-  },
-  {
-    href: "/eml-text-extractor",
-    title: "EML Text Extractor",
-    description: "Extract plain text from multiple .eml files, remove headers and HTML, then combine all texts into a single file separated by _SPT_ tag.",
-    icon: Scissors,
-    color: "from-yellow-500/10 to-amber-500/10",
-    iconColor: "text-yellow-500",
-    borderColor: "border-yellow-500/20",
-  },
-  {
-    href: "/email-source-separator",
-    title: "Email Source Separator",
-    description: "Separate email headers, plain text, and HTML parts. Select which parts to keep and download the modified email source as a text file.",
-    icon: Layers,
-    color: "from-violet-500/10 to-purple-500/10",
-    iconColor: "text-violet-500",
-    borderColor: "border-violet-500/20",
-  },
-  {
-    href: "/html-to-img",
-    title: "HTML to Image Converter",
-    description: "Convert HTML code to high-quality PNG or JPEG images. Perfect for creating email previews, screenshots, or visual representations of HTML content.",
-    icon: ImageIcon,
-    color: "from-orange-500/10 to-red-500/10",
-    iconColor: "text-orange-500",
-    borderColor: "border-orange-500/20",
-  },
-  {
-    href: "/ip-comparator",
-    title: "IP Comparator",
-    description: "Compare two IP address lists to find missing IPs. Identify unique addresses, common entries, and differences between IP lists with detailed statistics.",
-    icon: Network,
-    color: "from-indigo-500/10 to-violet-500/10",
-    iconColor: "text-indigo-500",
-    borderColor: "border-indigo-500/20",
-  },
-  {
-    href: "/photo-editor",
-    title: "Images Toolkit",
-    description: "All-in-one image processing suite featuring image combination, Base64 encoding, and interactive image map editor for email campaigns.",
-    icon: PanelsRightBottom,
-    color: "from-teal-500/10 to-cyan-500/10",
-    iconColor: "text-teal-500",
-    borderColor: "border-teal-500/20",
-  },
-
-  {
-    href: "/subject-rewrite",
-    title: "AI Subject Line Rewriter",
-    description: "Transform spam-triggering subject lines into deliverable, high-performing alternatives. Get 20 optimized versions for each input subject line with AI-powered spam filter bypass technology.",
-    icon: Mail,
-    color: "from-pink-500/10 to-purple-500/10",
-    iconColor: "text-pink-500",
-    borderColor: "border-pink-500/20",
-  },
-]
+import { MostUsedTools } from "./most-used-tools"
+import { tools } from "@/lib/tools-data"
 
 const DashboardPage = () => {
 
@@ -129,6 +45,9 @@ const DashboardPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Most Used Tools Section */}
+      <MostUsedTools />
 
       {/* New Tool Banner */}
       <Card className="relative overflow-hidden border-2 border-primary/30 bg-linear-to-br from-primary/10 via-primary/5 to-primary/10 mb-8 md:mb-12 group hover:shadow-xl hover:border-primary/50 transition-all duration-300">

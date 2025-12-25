@@ -139,6 +139,7 @@ export const COOKIE_NAMES = {
   // UI preferences
   UI_PREFERENCES: 'ui-preferences',
   RECENT_TOOLS: 'recent-tools',
+  TOOL_VISITS: 'tool-visits',
   
   // Work session
   WORK_DRAFTS: 'work-drafts',
