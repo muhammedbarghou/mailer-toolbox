@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useCallback, useMemo } from "react"
+import { useState, useCallback, useMemo, useEffect } from "react"
 import {
   Copy,
   Check,
@@ -18,9 +18,27 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  Plus,
+  Settings2,
+  Save,
+  Pencil,
+  FileArchive,
+  Loader2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { useAuth } from "@/contexts/AuthContext"
+import { toast } from "sonner"
 import JSZip from "jszip"
 
 interface FileItem {
@@ -31,219 +49,307 @@ interface FileItem {
   status: "pending" | "processing" | "completed" | "error"
 }
 
-function processEmail(input: string): string {
-  const lines = input.split("\n")
-  const outputLines: string[] = []
-  let inHeader = true
-  let boundary = ""
-  let currentHeader: string[] = []
-
-  const contentTypeMatch = input.match(/boundary=["']?([^"'\s]+)["']?/i)
-  if (contentTypeMatch) {
-    boundary = contentTypeMatch[1]
-  }
-
-  // Headers to remove: DKIM, SPF, ARC, Return-Path, and delivery params
-  const fieldsToRemove = [
-    "DKIM-Signature:",
-    "Received-SPF:",
-    "Authentication-Results:",
-    "ARC-Seal:",
-    "ARC-Message-Signature:",
-    "ARC-Authentication-Results:",
-    "Return-Path:",
-    "Delivered-To:",
-    "Received: by",
-    "X-Received:",
-    "X-original-To",
-  ]
-
-  // Headers to skip (will be replaced with new ones)
-  const headersToSkip = [
-    "List-Unsubscribe:",
-    "List-Unsubscribe-Post:",
-  ]
-
-  for (let i = 0; i < lines.length; i++) {
-    const rawLine = lines[i]
-    const line = rawLine.trimEnd()
-
-    if (boundary && line.startsWith("--") && line.includes(boundary)) {
-      inHeader = false
-      outputLines.push(line)
-      continue
-    }
-
-    if (inHeader && line === "" && outputLines.length > 0) {
-      inHeader = false
-      outputLines.push("")
-      continue
-    }
-
-    if (inHeader) {
-      // Skip headers that should be removed (including continuation lines)
-      if (fieldsToRemove.some((field) => line.toLowerCase().startsWith(field.toLowerCase()))) {
-        // Skip continuation lines
-        while (i + 1 < lines.length && (lines[i + 1].startsWith("\t") || lines[i + 1].startsWith(" "))) {
-          i++
-        }
-        continue
-      }
-
-      // Skip headers that will be replaced (including continuation lines)
-      if (headersToSkip.some((field) => line.toLowerCase().startsWith(field.toLowerCase()))) {
-        // Skip continuation lines
-        while (i + 1 < lines.length && (lines[i + 1].startsWith("\t") || lines[i + 1].startsWith(" "))) {
-          i++
-        }
-        continue
-      }
-
-      if (line.startsWith("Received: from")) {
-        if (currentHeader.length > 0) {
-          outputLines.push(...currentHeader)
-          currentHeader = []
-        }
-        currentHeader.push(line)
-        while (i + 1 < lines.length && (lines[i + 1].startsWith("\t") || lines[i + 1].startsWith(" "))) {
-          i++
-          currentHeader.push(lines[i].trimEnd())
-        }
-      } else if (line.startsWith("To:")) {
-        if (currentHeader.length > 0) {
-          outputLines.push(...currentHeader)
-          currentHeader = []
-        }
-        // Always modify To: to [*to]
-        outputLines.push("To: [*to]")
-      } else if (line.startsWith("From:")) {
-        if (currentHeader.length > 0) {
-          outputLines.push(...currentHeader)
-          currentHeader = []
-        }
-        const fromMatch = line.match(/From:\s*(?:"([^"]*)"|([^<]*))\s*<(.+?)>/i)
-        if (fromMatch) {
-          const namePart = (fromMatch[1] || fromMatch[2] || "").trim()
-          let cleanName = namePart
-
-          if (namePart.includes("@")) {
-            const domainPart = namePart.split("@")[1] || ""
-            if (domainPart.includes(".")) {
-              const domainParts = domainPart.split(".")
-              cleanName = domainParts[domainParts.length - 2]
-            } else {
-              cleanName = domainPart
-            }
-          } else if (namePart.includes(".")) {
-            const domainParts = namePart.split(".")
-            cleanName = domainParts[domainParts.length - 2]
-          }
-
-          if (cleanName) {
-            cleanName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1)
-          }
-
-          const emailPart = fromMatch[3]
-          let localPart = emailPart
-          if (emailPart.includes("@")) {
-            localPart = emailPart.split("@")[0]
-          }
-
-          outputLines.push(`From: "${cleanName}" <${localPart}@[P_RPATH]>`)
-        } else {
-          outputLines.push("From: <noreply@[P_RPATH]>")
-        }
-      } else if (line.toLowerCase().startsWith("message-id:")) {
-        if (currentHeader.length > 0) {
-          outputLines.push(...currentHeader)
-          currentHeader = []
-        }
-        const m = line.match(/^Message-Id:\s*(<)?([^>]+?)(>)?\s*$/i)
-        let idVal = m ? m[2] : line.replace(/Message-Id:/i, "").trim()
-        idVal = idVal.trim()
-
-        let domain = "[RNDS]"
-        let localPart = idVal
-
-        if (idVal.includes("@")) {
-          const parts = idVal.split("@")
-          localPart = parts[0]
-          domain = parts[1]
-        }
-
-        if (!localPart.includes("[EID]")) {
-          const mid = Math.floor(localPart.length / 2) || 0
-          localPart = localPart.slice(0, mid) + "[EID]" + localPart.slice(mid)
-        }
-
-        const newMsgId = `<${localPart}@${domain}>`
-        outputLines.push(`Message-ID: ${newMsgId}`)
-      } else if (line.startsWith("Content-Type:")) {
-        if (currentHeader.length > 0) {
-          outputLines.push(...currentHeader)
-          currentHeader = []
-        }
-        outputLines.push(line)
-        while (i + 1 < lines.length && (lines[i + 1].startsWith("\t") || lines[i + 1].startsWith(" "))) {
-          i++
-          outputLines.push(lines[i].trimEnd())
-        }
-      } else if (
-        line.startsWith("MIME-Version:") ||
-        line.startsWith("Subject:") ||
-        line.startsWith("Date:") ||
-        line.startsWith("Reply-To:") ||
-        line.startsWith("Content-Transfer-Encoding:")
-      ) {
-        if (currentHeader.length > 0) {
-          outputLines.push(...currentHeader)
-          currentHeader = []
-        }
-        outputLines.push(line)
-      } else if (!line.startsWith("Cc:")) {
-        // Keep other headers except Cc (which we skip)
-        if (currentHeader.length > 0) {
-          outputLines.push(...currentHeader)
-          currentHeader = []
-        }
-        outputLines.push(line)
-      }
-    } else {
-      outputLines.push(line)
-    }
-  }
-
-  if (currentHeader.length > 0) {
-    outputLines.push(...currentHeader)
-  }
-
-  // Find insertion point after From: header
-  const fromIndex = outputLines.findIndex((line) => line.startsWith("From:"))
-  const insertIndex = fromIndex !== -1 ? fromIndex + 1 : outputLines.findIndex((line) => line === "") !== -1 ? outputLines.findIndex((line) => line === "") : outputLines.length
-
-  // Add required headers
-  const headersToInsert: string[] = [
-    "List-Unsubscribe: <mailto:unsubscribe@[P_RPATH]>, <http://[P_RPATH]/unsubscribe?email=abuse@[P_RPATH]>",
-    "List-Unsubscribe-Post: List-Unsubscribe=One-Click",
-  ]
-
-  if (insertIndex !== -1) {
-    outputLines.splice(insertIndex, 0, ...headersToInsert)
-  }
-
-  return outputLines.join("\n")
+interface HeaderParameter {
+  id: string
+  name: string
+  placeholder: string
+  description: string | null
+  isNew?: boolean
+  isEditing?: boolean
 }
 
+// Default header parameters
+const DEFAULT_PARAMETERS: HeaderParameter[] = [
+  {
+    id: "default-1",
+    name: "To Address",
+    placeholder: "[*to]",
+    description: "Recipient email address placeholder",
+  },
+  {
+    id: "default-2",
+    name: "Return Path Domain",
+    placeholder: "[P_RPATH]",
+    description: "Return path domain placeholder",
+  },
+  {
+    id: "default-3",
+    name: "Email ID",
+    placeholder: "[EID]",
+    description: "Unique email identifier placeholder",
+  },
+  {
+    id: "default-4",
+    name: "Random String",
+    placeholder: "[RNDS]",
+    description: "Random string placeholder for Message-ID domain",
+  },
+]
+
+const MAX_INDIVIDUAL_DOWNLOADS = 20
+
 const EmailHeaderProcessor = () => {
+  const { user } = useAuth()
   const [files, setFiles] = useState<FileItem[]>([])
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  // Custom parameters state
+  const [parameters, setParameters] = useState<HeaderParameter[]>(DEFAULT_PARAMETERS)
+  const [showParametersDialog, setShowParametersDialog] = useState(false)
+  const [editingParameter, setEditingParameter] = useState<HeaderParameter | null>(null)
+  const [newParameterName, setNewParameterName] = useState("")
+  const [newParameterPlaceholder, setNewParameterPlaceholder] = useState("")
+  const [newParameterDescription, setNewParameterDescription] = useState("")
+  const [loadingParameters, setLoadingParameters] = useState(false)
+  const [savingParameters, setSavingParameters] = useState(false)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+
   const selectedFile = useMemo(() => {
     return files.find((f) => f.id === selectedFileId)
   }, [files, selectedFileId])
+
+  // Load parameters from user profile
+  useEffect(() => {
+    const loadParameters = async () => {
+      if (!user) {
+        setParameters(DEFAULT_PARAMETERS)
+        return
+      }
+
+      setLoadingParameters(true)
+      try {
+        const response = await fetch("/api/header-parameters")
+        if (response.ok) {
+          const data = await response.json()
+          if (data.parameters && data.parameters.length > 0) {
+            setParameters(
+              data.parameters.map((p: HeaderParameter) => ({
+                id: p.id,
+                name: p.name,
+                placeholder: p.placeholder,
+                description: p.description,
+              }))
+            )
+          } else {
+            setParameters(DEFAULT_PARAMETERS)
+          }
+        } else if (response.status === 401) {
+          // Not authenticated, use defaults
+          setParameters(DEFAULT_PARAMETERS)
+        }
+      } catch (error) {
+        console.error("Failed to load parameters:", error)
+        setParameters(DEFAULT_PARAMETERS)
+      } finally {
+        setLoadingParameters(false)
+      }
+    }
+
+    loadParameters()
+  }, [user])
+
+  // Process email with custom parameters
+  const processEmail = useCallback(
+    (input: string): string => {
+      const lines = input.split("\n")
+      const outputLines: string[] = []
+      let inHeader = true
+      let boundary = ""
+
+      const contentTypeMatch = input.match(/boundary=["']?([^"'\s]+)["']?/i)
+      if (contentTypeMatch) {
+        boundary = contentTypeMatch[1]
+      }
+
+      // Headers to remove: DKIM, SPF, ARC, Return-Path, and delivery params
+      const fieldsToRemove = [
+        "DKIM-Signature:",
+        "Received-SPF:",
+        "Authentication-Results:",
+        "ARC-Seal:",
+        "ARC-Message-Signature:",
+        "ARC-Authentication-Results:",
+        "Return-Path:",
+        "Delivered-To:",
+        "Received: by",
+        "X-Received:",
+        "X-original-To",
+      ]
+
+      // Headers to skip (will be replaced with new ones)
+      const headersToSkip = ["List-Unsubscribe:", "List-Unsubscribe-Post:"]
+
+      // Get placeholder values from parameters
+      const toPlaceholder = parameters.find((p) => p.name === "To Address")?.placeholder || "[*to]"
+      const rpathPlaceholder =
+        parameters.find((p) => p.name === "Return Path Domain")?.placeholder || "[P_RPATH]"
+      const eidPlaceholder = parameters.find((p) => p.name === "Email ID")?.placeholder || "[EID]"
+      const rndsPlaceholder =
+        parameters.find((p) => p.name === "Random String")?.placeholder || "[RNDS]"
+
+      for (let i = 0; i < lines.length; i++) {
+        const rawLine = lines[i]
+        const line = rawLine.trimEnd()
+
+        if (boundary && line.startsWith("--") && line.includes(boundary)) {
+          inHeader = false
+          outputLines.push(line)
+          continue
+        }
+
+        if (inHeader && line === "" && outputLines.length > 0) {
+          inHeader = false
+          outputLines.push("")
+          continue
+        }
+
+        if (inHeader) {
+          // Skip headers that should be removed (including continuation lines)
+          if (
+            fieldsToRemove.some((field) => line.toLowerCase().startsWith(field.toLowerCase()))
+          ) {
+            // Skip continuation lines
+            while (
+              i + 1 < lines.length &&
+              (lines[i + 1].startsWith("\t") || lines[i + 1].startsWith(" "))
+            ) {
+              i++
+            }
+            continue
+          }
+
+          // Skip headers that will be replaced (including continuation lines)
+          if (
+            headersToSkip.some((field) => line.toLowerCase().startsWith(field.toLowerCase()))
+          ) {
+            // Skip continuation lines
+            while (
+              i + 1 < lines.length &&
+              (lines[i + 1].startsWith("\t") || lines[i + 1].startsWith(" "))
+            ) {
+              i++
+            }
+            continue
+          }
+
+          if (line.startsWith("Received: from")) {
+            outputLines.push(line)
+            while (
+              i + 1 < lines.length &&
+              (lines[i + 1].startsWith("\t") || lines[i + 1].startsWith(" "))
+            ) {
+              i++
+              outputLines.push(lines[i].trimEnd())
+            }
+          } else if (line.startsWith("To:")) {
+            // Always modify To: to use the placeholder
+            outputLines.push(`To: ${toPlaceholder}`)
+          } else if (line.startsWith("From:")) {
+            const fromMatch = line.match(/From:\s*(?:"([^"]*)"|([^<]*))\s*<(.+?)>/i)
+            if (fromMatch) {
+              const namePart = (fromMatch[1] || fromMatch[2] || "").trim()
+              let cleanName = namePart
+
+              if (namePart.includes("@")) {
+                const domainPart = namePart.split("@")[1] || ""
+                if (domainPart.includes(".")) {
+                  const domainParts = domainPart.split(".")
+                  cleanName = domainParts[domainParts.length - 2]
+                } else {
+                  cleanName = domainPart
+                }
+              } else if (namePart.includes(".")) {
+                const domainParts = namePart.split(".")
+                cleanName = domainParts[domainParts.length - 2]
+              }
+
+              if (cleanName) {
+                cleanName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1)
+              }
+
+              const emailPart = fromMatch[3]
+              let localPart = emailPart
+              if (emailPart.includes("@")) {
+                localPart = emailPart.split("@")[0]
+              }
+
+              outputLines.push(`From: "${cleanName}" <${localPart}@${rpathPlaceholder}>`)
+            } else {
+              outputLines.push(`From: <noreply@${rpathPlaceholder}>`)
+            }
+          } else if (line.toLowerCase().startsWith("message-id:")) {
+            const m = line.match(/^Message-Id:\s*(<)?([^>]+?)(>)?\s*$/i)
+            let idVal = m ? m[2] : line.replace(/Message-Id:/i, "").trim()
+            idVal = idVal.trim()
+
+            let domain = rndsPlaceholder
+            let localPart = idVal
+
+            if (idVal.includes("@")) {
+              const parts = idVal.split("@")
+              localPart = parts[0]
+              domain = parts[1]
+            }
+
+            if (!localPart.includes(eidPlaceholder)) {
+              const mid = Math.floor(localPart.length / 2) || 0
+              localPart = localPart.slice(0, mid) + eidPlaceholder + localPart.slice(mid)
+            }
+
+            const newMsgId = `<${localPart}@${domain}>`
+            outputLines.push(`Message-ID: ${newMsgId}`)
+          } else if (line.startsWith("Content-Type:")) {
+            outputLines.push(line)
+            while (
+              i + 1 < lines.length &&
+              (lines[i + 1].startsWith("\t") || lines[i + 1].startsWith(" "))
+            ) {
+              i++
+              outputLines.push(lines[i].trimEnd())
+            }
+          } else if (
+            line.startsWith("MIME-Version:") ||
+            line.startsWith("Subject:") ||
+            line.startsWith("Date:") ||
+            line.startsWith("Reply-To:") ||
+            line.startsWith("Content-Transfer-Encoding:")
+          ) {
+            outputLines.push(line)
+          } else if (!line.startsWith("Cc:")) {
+            // Keep other headers except Cc (which we skip)
+            outputLines.push(line)
+          }
+        } else {
+          outputLines.push(line)
+        }
+      }
+
+      // Find insertion point after From: header
+      const fromIndex = outputLines.findIndex((line) => line.startsWith("From:"))
+      const insertIndex =
+        fromIndex !== -1
+          ? fromIndex + 1
+          : outputLines.findIndex((line) => line === "") !== -1
+            ? outputLines.findIndex((line) => line === "")
+            : outputLines.length
+
+      // Add required headers using placeholders
+      const headersToInsert: string[] = [
+        `List-Unsubscribe: <mailto:unsubscribe@${rpathPlaceholder}>, <http://${rpathPlaceholder}/unsubscribe?email=abuse@${rpathPlaceholder}>`,
+        "List-Unsubscribe-Post: List-Unsubscribe=One-Click",
+      ]
+
+      if (insertIndex !== -1) {
+        outputLines.splice(insertIndex, 0, ...headersToInsert)
+      }
+
+      return outputLines.join("\n")
+    },
+    [parameters]
+  )
 
   const handleFilesUpload = useCallback(
     async (fileList: FileList) => {
@@ -251,11 +357,14 @@ const EmailHeaderProcessor = () => {
       const textFileExtensions = [".eml", ".txt", ".text", ".msg", ".email"]
       const fileArray = Array.from(fileList).filter((file) => {
         const fileName = file.name.toLowerCase()
-        return textFileExtensions.some((ext) => fileName.endsWith(ext)) || file.type.startsWith("text/")
+        return (
+          textFileExtensions.some((ext) => fileName.endsWith(ext)) ||
+          file.type.startsWith("text/")
+        )
       })
 
       if (fileArray.length === 0) {
-        alert("Please upload text-based files (.eml, .txt, etc.)")
+        toast.error("Please upload text-based files (.eml, .txt, etc.)")
         return
       }
 
@@ -277,7 +386,7 @@ const EmailHeaderProcessor = () => {
             processedContent: "",
             status: "pending",
           })
-        } catch (err) {
+        } catch {
           console.error(`Failed to read ${file.name}`)
         }
       }
@@ -287,12 +396,12 @@ const EmailHeaderProcessor = () => {
         setSelectedFileId(newFiles[0].id)
       }
     },
-    [files.length, selectedFileId],
+    [selectedFileId]
   )
 
   const handleProcessAll = useCallback(async () => {
     if (files.length === 0) {
-      alert("Please upload files first")
+      toast.error("Please upload files first")
       return
     }
 
@@ -312,7 +421,7 @@ const EmailHeaderProcessor = () => {
         const processed = processEmail(updatedFiles[i].originalContent)
         updatedFiles[i].processedContent = processed
         updatedFiles[i].status = "completed"
-      } catch (err) {
+      } catch {
         updatedFiles[i].status = "error"
       }
 
@@ -320,13 +429,14 @@ const EmailHeaderProcessor = () => {
     }
 
     setProcessing(false)
-  }, [files])
+    toast.success("All files processed successfully!")
+  }, [files, processEmail])
 
   const handleDownloadAll = useCallback(async () => {
     const completedFiles = files.filter((f) => f.status === "completed")
 
     if (completedFiles.length === 0) {
-      alert("No processed files to download")
+      toast.error("No processed files to download")
       return
     }
 
@@ -342,7 +452,7 @@ const EmailHeaderProcessor = () => {
 
       // Generate the zip file
       const zipBlob = await zip.generateAsync({ type: "blob" })
-      
+
       // Create download link
       const url = URL.createObjectURL(zipBlob)
       const a = document.createElement("a")
@@ -352,9 +462,11 @@ const EmailHeaderProcessor = () => {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
+
+      toast.success(`Downloaded ${completedFiles.length} files as ZIP`)
     } catch (error) {
       console.error("Failed to create zip file:", error)
-      alert("Failed to create zip file. Please try again.")
+      toast.error("Failed to create zip file. Please try again.")
     }
   }, [files])
 
@@ -370,15 +482,16 @@ const EmailHeaderProcessor = () => {
       const a = document.createElement("a")
       a.href = url
       // Extract file extension and replace with .txt
-      const fileExtension = file.name.substring(file.name.lastIndexOf("."))
       const baseName = file.name.substring(0, file.name.lastIndexOf(".")) || file.name
       a.download = `processed-${baseName}.txt`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
+
+      toast.success(`Downloaded: ${file.name}`)
     },
-    [files],
+    [files]
   )
 
   const handleRemoveFile = useCallback(
@@ -389,7 +502,7 @@ const EmailHeaderProcessor = () => {
         setSelectedFileId(remainingFiles.length > 0 ? remainingFiles[0].id : null)
       }
     },
-    [files, selectedFileId],
+    [files, selectedFileId]
   )
 
   const handleClearAll = useCallback(() => {
@@ -417,18 +530,126 @@ const EmailHeaderProcessor = () => {
         handleFilesUpload(e.dataTransfer.files)
       }
     },
-    [handleFilesUpload],
+    [handleFilesUpload]
   )
-
 
   const copyToClipboard = useCallback(async (text: string) => {
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
+      toast.success("Copied to clipboard!")
       setTimeout(() => setCopied(false), 2000)
-    } catch (err) {
+    } catch {
       console.error("Failed to copy")
+      toast.error("Failed to copy to clipboard")
     }
+  }, [])
+
+  // Parameter management handlers
+  const handleAddParameter = useCallback(() => {
+    if (!newParameterName.trim() || !newParameterPlaceholder.trim()) {
+      toast.error("Please enter parameter name and placeholder")
+      return
+    }
+
+    const newParam: HeaderParameter = {
+      id: `new-${Date.now()}`,
+      name: newParameterName.trim(),
+      placeholder: newParameterPlaceholder.trim(),
+      description: newParameterDescription.trim() || null,
+      isNew: true,
+    }
+
+    setParameters((prev) => [...prev, newParam])
+    setNewParameterName("")
+    setNewParameterPlaceholder("")
+    setNewParameterDescription("")
+    setHasUnsavedChanges(true)
+    toast.success("Parameter added")
+  }, [newParameterName, newParameterPlaceholder, newParameterDescription])
+
+  const handleEditParameter = useCallback((param: HeaderParameter) => {
+    setEditingParameter({ ...param })
+  }, [])
+
+  const handleUpdateParameter = useCallback(() => {
+    if (!editingParameter) return
+
+    if (!editingParameter.name.trim() || !editingParameter.placeholder.trim()) {
+      toast.error("Please enter parameter name and placeholder")
+      return
+    }
+
+    setParameters((prev) =>
+      prev.map((p) =>
+        p.id === editingParameter.id
+          ? {
+              ...editingParameter,
+              name: editingParameter.name.trim(),
+              placeholder: editingParameter.placeholder.trim(),
+              description: editingParameter.description?.trim() || null,
+            }
+          : p
+      )
+    )
+    setEditingParameter(null)
+    setHasUnsavedChanges(true)
+    toast.success("Parameter updated")
+  }, [editingParameter])
+
+  const handleDeleteParameter = useCallback((paramId: string) => {
+    setParameters((prev) => prev.filter((p) => p.id !== paramId))
+    setHasUnsavedChanges(true)
+    toast.success("Parameter removed")
+  }, [])
+
+  const handleSaveParameters = useCallback(async () => {
+    if (!user) {
+      toast.error("Please sign in to save parameters to your profile")
+      return
+    }
+
+    setSavingParameters(true)
+
+    try {
+      // First, delete all existing parameters
+      const existingResponse = await fetch("/api/header-parameters")
+      if (existingResponse.ok) {
+        const existingData = await existingResponse.json()
+        for (const param of existingData.parameters || []) {
+          await fetch(`/api/header-parameters/${param.id}`, {
+            method: "DELETE",
+          })
+        }
+      }
+
+      // Then, create all current parameters
+      for (const param of parameters) {
+        await fetch("/api/header-parameters", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: param.name,
+            placeholder: param.placeholder,
+            description: param.description,
+          }),
+        })
+      }
+
+      setHasUnsavedChanges(false)
+      toast.success("Parameters saved to your profile!")
+    } catch (error) {
+      console.error("Failed to save parameters:", error)
+      toast.error("Failed to save parameters. Please try again.")
+    } finally {
+      setSavingParameters(false)
+    }
+  }, [user, parameters])
+
+  const handleResetToDefaults = useCallback(() => {
+    setParameters(DEFAULT_PARAMETERS)
+    setHasUnsavedChanges(true)
+    toast.success("Reset to default parameters")
   }, [])
 
   const stats = useMemo(() => {
@@ -441,6 +662,9 @@ const EmailHeaderProcessor = () => {
     return { total, completed, pending, processing: processingCount, error }
   }, [files])
 
+  // Determine if individual downloads should be disabled
+  const disableIndividualDownloads = stats.completed > MAX_INDIVIDUAL_DOWNLOADS
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-[1400px] mx-auto p-4 md:p-6 lg:p-8">
@@ -450,10 +674,26 @@ const EmailHeaderProcessor = () => {
               <FileText className="text-foreground" size={24} />
             </div>
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">Email Header Processor - Batch Mode</h1>
-              <p className="text-sm text-muted-foreground mt-1">Process unlimited text-based files at once (.eml, .txt, etc.)</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+                Email Header Processor - Batch Mode
+              </h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                Process unlimited text-based files at once (.eml, .txt, etc.)
+              </p>
             </div>
           </div>
+          <Button
+            variant="outline"
+            onClick={() => setShowParametersDialog(true)}
+            className="gap-2"
+            aria-label="Configure header parameters"
+          >
+            <Settings2 size={16} />
+            <span className="hidden sm:inline">Parameters</span>
+            {hasUnsavedChanges && (
+              <span className="h-2 w-2 rounded-full bg-amber-500" />
+            )}
+          </Button>
         </div>
 
         {files.length > 0 && (
@@ -487,6 +727,14 @@ const EmailHeaderProcessor = () => {
                   </div>
                 )}
               </div>
+              {disableIndividualDownloads && (
+                <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
+                  <FileArchive size={14} />
+                  <span>
+                    More than {MAX_INDIVIDUAL_DOWNLOADS} files — download as ZIP only
+                  </span>
+                </div>
+              )}
             </div>
           </Card>
         )}
@@ -500,7 +748,12 @@ const EmailHeaderProcessor = () => {
               </h2>
               <div className="flex gap-2">
                 <label className="cursor-pointer">
-                  <Button variant="outline" size="sm" className="gap-2 bg-transparent" asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 bg-transparent"
+                    asChild
+                  >
                     <span>
                       <Upload size={16} />
                     </span>
@@ -511,9 +764,16 @@ const EmailHeaderProcessor = () => {
                     multiple
                     onChange={(e) => e.target.files && handleFilesUpload(e.target.files)}
                     className="hidden"
+                    aria-label="Upload files"
                   />
                 </label>
-                <Button variant="outline" size="sm" onClick={handleClearAll} disabled={files.length === 0}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClearAll}
+                  disabled={files.length === 0}
+                  aria-label="Clear all files"
+                >
                   <Trash2 size={16} />
                 </Button>
               </div>
@@ -527,12 +787,16 @@ const EmailHeaderProcessor = () => {
               className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
                 dragActive ? "border-primary bg-primary/10" : "border-border bg-card"
               }`}
+              role="region"
+              aria-label="Drop zone for file upload"
             >
               <FolderOpen size={48} className="mx-auto mb-4 text-muted-foreground" />
               <p className="text-sm text-foreground font-medium mb-1">Drop text files here</p>
               <p className="text-xs text-muted-foreground">(.eml, .txt, .text, .msg, .email)</p>
               <p className="text-xs text-muted-foreground mt-1">or click the upload button above</p>
-              <p className="text-xs text-muted-foreground mt-2">Upload as many files as you want</p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Upload as many files as you want
+              </p>
             </div>
 
             <div className="space-y-2 max-h-[500px] overflow-y-auto">
@@ -545,21 +809,35 @@ const EmailHeaderProcessor = () => {
                       : "border-border hover:border-muted-foreground"
                   }`}
                   onClick={() => setSelectedFileId(file.id)}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      setSelectedFileId(file.id)
+                    }
+                  }}
+                  role="button"
+                  aria-label={`Select file ${file.name}`}
+                  aria-pressed={selectedFileId === file.id}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       {file.status === "completed" && (
                         <CheckCircle2 size={16} className="text-green-400 shrink-0" />
                       )}
-                      {file.status === "pending" && <Clock size={16} className="text-yellow-400 shrink-0" />}
+                      {file.status === "pending" && (
+                        <Clock size={16} className="text-yellow-400 shrink-0" />
+                      )}
                       {file.status === "processing" && (
                         <RefreshCw size={16} className="text-blue-400 animate-spin shrink-0" />
                       )}
-                      {file.status === "error" && <AlertCircle size={16} className="text-red-400 shrink-0" />}
+                      {file.status === "error" && (
+                        <AlertCircle size={16} className="text-red-400 shrink-0" />
+                      )}
                       <span className="text-sm truncate">{file.name}</span>
                     </div>
                     <div className="flex gap-1 shrink-0">
-                      {file.status === "completed" && (
+                      {file.status === "completed" && !disableIndividualDownloads && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -568,6 +846,7 @@ const EmailHeaderProcessor = () => {
                             handleDownloadSingle(file.id)
                           }}
                           className="h-7 w-7 p-0"
+                          aria-label={`Download ${file.name}`}
                         >
                           <Download size={14} />
                         </Button>
@@ -580,6 +859,7 @@ const EmailHeaderProcessor = () => {
                           handleRemoveFile(file.id)
                         }}
                         className="h-7 w-7 p-0"
+                        aria-label={`Remove ${file.name}`}
                       >
                         <X size={14} />
                       </Button>
@@ -614,7 +894,7 @@ const EmailHeaderProcessor = () => {
                   variant="outline"
                   className="w-full gap-2 bg-transparent"
                 >
-                  <Download size={16} />
+                  <FileArchive size={16} />
                   Download All as ZIP ({stats.completed})
                 </Button>
               </div>
@@ -628,15 +908,30 @@ const EmailHeaderProcessor = () => {
                 {selectedFile ? selectedFile.name : "Preview"}
               </h2>
               {selectedFile && selectedFile.status === "completed" && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => copyToClipboard(selectedFile.processedContent)}
-                  className="gap-2"
-                >
-                  {copied ? <Check size={16} /> : <Copy size={16} />}
-                  <span className="hidden sm:inline">{copied ? "Copied" : "Copy"}</span>
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(selectedFile.processedContent)}
+                    className="gap-2"
+                    aria-label="Copy processed content to clipboard"
+                  >
+                    {copied ? <Check size={16} /> : <Copy size={16} />}
+                    <span className="hidden sm:inline">{copied ? "Copied" : "Copy"}</span>
+                  </Button>
+                  {!disableIndividualDownloads && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDownloadSingle(selectedFile.id)}
+                      className="gap-2"
+                      aria-label="Download processed file"
+                    >
+                      <Download size={16} />
+                      <span className="hidden sm:inline">Download</span>
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -665,6 +960,211 @@ const EmailHeaderProcessor = () => {
           </div>
         </div>
       </div>
+
+      {/* Parameters Dialog */}
+      <Dialog open={showParametersDialog} onOpenChange={setShowParametersDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings2 size={20} />
+              Header Parameters
+            </DialogTitle>
+            <DialogDescription>
+              Configure custom placeholders used when processing email headers.
+              {user
+                ? " Parameters will be saved to your profile."
+                : " Sign in to save parameters to your profile."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Existing Parameters */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Current Parameters</Label>
+              {loadingParameters ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {parameters.map((param) => (
+                    <div
+                      key={param.id}
+                      className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3"
+                    >
+                      {editingParameter?.id === param.id ? (
+                        <div className="flex-1 space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input
+                              placeholder="Parameter name"
+                              value={editingParameter.name}
+                              onChange={(e) =>
+                                setEditingParameter({
+                                  ...editingParameter,
+                                  name: e.target.value,
+                                })
+                              }
+                              aria-label="Parameter name"
+                            />
+                            <Input
+                              placeholder="Placeholder e.g., [*to]"
+                              value={editingParameter.placeholder}
+                              onChange={(e) =>
+                                setEditingParameter({
+                                  ...editingParameter,
+                                  placeholder: e.target.value,
+                                })
+                              }
+                              aria-label="Placeholder value"
+                            />
+                          </div>
+                          <Input
+                            placeholder="Description (optional)"
+                            value={editingParameter.description || ""}
+                            onChange={(e) =>
+                              setEditingParameter({
+                                ...editingParameter,
+                                description: e.target.value,
+                              })
+                            }
+                            aria-label="Parameter description"
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={handleUpdateParameter}
+                              aria-label="Save changes"
+                            >
+                              <Check size={14} className="mr-1" />
+                              Save
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setEditingParameter(null)}
+                              aria-label="Cancel editing"
+                            >
+                              <X size={14} className="mr-1" />
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{param.name}</span>
+                              <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
+                                {param.placeholder}
+                              </code>
+                            </div>
+                            {param.description && (
+                              <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                                {param.description}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditParameter(param)}
+                              className="h-7 w-7 p-0"
+                              aria-label={`Edit ${param.name}`}
+                            >
+                              <Pencil size={14} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteParameter(param.id)}
+                              className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                              aria-label={`Delete ${param.name}`}
+                            >
+                              <Trash2 size={14} />
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  {parameters.length === 0 && (
+                    <div className="text-center py-4 text-muted-foreground text-sm">
+                      No parameters defined. Add one below or reset to defaults.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Add New Parameter */}
+            <div className="space-y-2 border-t pt-4">
+              <Label className="text-sm font-medium">Add New Parameter</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  placeholder="Parameter name"
+                  value={newParameterName}
+                  onChange={(e) => setNewParameterName(e.target.value)}
+                  aria-label="New parameter name"
+                />
+                <Input
+                  placeholder="Placeholder e.g., [CUSTOM]"
+                  value={newParameterPlaceholder}
+                  onChange={(e) => setNewParameterPlaceholder(e.target.value)}
+                  aria-label="New placeholder value"
+                />
+              </div>
+              <Input
+                placeholder="Description (optional)"
+                value={newParameterDescription}
+                onChange={(e) => setNewParameterDescription(e.target.value)}
+                aria-label="New parameter description"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAddParameter}
+                disabled={!newParameterName.trim() || !newParameterPlaceholder.trim()}
+                className="w-full gap-2"
+              >
+                <Plus size={14} />
+                Add Parameter
+              </Button>
+            </div>
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2 border-t pt-4">
+            <Button
+              variant="outline"
+              onClick={handleResetToDefaults}
+              className="gap-2"
+            >
+              <RefreshCw size={14} />
+              Reset to Defaults
+            </Button>
+            <div className="flex-1" />
+            {user && (
+              <Button
+                onClick={handleSaveParameters}
+                disabled={savingParameters || !hasUnsavedChanges}
+                className="gap-2"
+              >
+                {savingParameters ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save size={14} />
+                    Save to Profile
+                  </>
+                )}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
