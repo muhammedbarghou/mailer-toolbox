@@ -62,12 +62,6 @@ function processEmail(input: string): string {
   const headersToSkip = [
     "List-Unsubscribe:",
     "List-Unsubscribe-Post:",
-    "References:",
-    "Feedback-ID:",
-    "X-Mailer:",
-    "Priority:",
-    "Importance:",
-    "Sensitivity:",
   ]
 
   for (let i = 0; i < lines.length; i++) {
@@ -231,12 +225,6 @@ function processEmail(input: string): string {
   const headersToInsert: string[] = [
     "List-Unsubscribe: <mailto:unsubscribe@[P_RPATH]>, <http://[P_RPATH]/unsubscribe?email=abuse@[P_RPATH]>",
     "List-Unsubscribe-Post: List-Unsubscribe=One-Click",
-    "References: <mnidm.3579.2787.34094.1486337610._@mn1.byway.it> <CANMFzQMn+UR8uM9bUq5Y8j7Pdm0EgXhBtXK76BUOBW3hLEr2_A@mail.gmail.com>",
-    "Feedback-ID: ::1.us-east-1.1nRXWOT+ETvogqnAUaOa7HjKGx1p40xVES7T8DfH/Gc=:AmazonSES",
-    "X-Mailer: Microsoft CDO for Windows 2000",
-    "Priority: urgent",
-    "Importance: High",
-    "Sensitivity: Private",
   ]
 
   if (insertIndex !== -1) {
