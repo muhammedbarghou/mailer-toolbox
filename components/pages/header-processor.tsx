@@ -24,11 +24,15 @@ import {
   Pencil,
   FileArchive,
   Loader2,
+  Bookmark,
+  BookmarkCheck,
+  HelpCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -37,9 +41,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "sonner"
 import JSZip from "jszip"
+import { AppGuide } from "./app-guide"
 
 interface FileItem {
   id: string
@@ -107,6 +119,32 @@ const EmailHeaderProcessor = () => {
   const [savingParameters, setSavingParameters] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
+  // Paste mode state
+  const [pasteMode, setPasteMode] = useState(false)
+  const [pastedContent, setPastedContent] = useState("")
+  const [pastedProcessedContent, setPastedProcessedContent] = useState("")
+  const [pastedProcessing, setPastedProcessing] = useState(false)
+
+  // Custom headers state
+  const [customHeaders, setCustomHeaders] = useState<string[]>([])
+  const [editingCustomHeader, setEditingCustomHeader] = useState<{ index: number; value: string } | null>(null)
+  const [newCustomHeader, setNewCustomHeader] = useState("")
+
+  // X-header removal state
+  const [removeXHeaders, setRemoveXHeaders] = useState<boolean>(true)
+
+  // Profile state
+  const [profiles, setProfiles] = useState<Array<{ id: string; name: string; description: string | null; is_default: boolean }>>([])
+  const [currentProfileId, setCurrentProfileId] = useState<string | null>(null)
+  const [loadingProfiles, setLoadingProfiles] = useState(false)
+  const [showProfilesDialog, setShowProfilesDialog] = useState(false)
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [newProfileName, setNewProfileName] = useState("")
+  const [newProfileDescription, setNewProfileDescription] = useState("")
+
+  // Guide dialog state
+  const [showGuideDialog, setShowGuideDialog] = useState(false)
+
   const selectedFile = useMemo(() => {
     return files.find((f) => f.id === selectedFileId)
   }, [files, selectedFileId])
@@ -151,6 +189,109 @@ const EmailHeaderProcessor = () => {
     loadParameters()
   }, [user])
 
+  // Profile management handlers
+  const handleApplyProfile = useCallback(async (profileId: string) => {
+    if (!user) {
+      toast.error("Please sign in to use profiles")
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/header-profiles/${profileId}/apply`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+      
+      // Check if response has content before parsing JSON
+      const contentType = response.headers.get("content-type")
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text()
+        console.error("Non-JSON response:", text)
+        toast.error(`Failed to apply profile: ${response.status} ${response.statusText}`)
+        return
+      }
+
+      let data
+      try {
+        const text = await response.text()
+        if (!text || text.trim().length === 0) {
+          console.error("Empty response from server")
+          toast.error("Failed to apply profile: Empty response from server")
+          return
+        }
+        data = JSON.parse(text)
+      } catch (parseError) {
+        console.error("Failed to parse JSON response:", parseError)
+        toast.error("Failed to apply profile: Invalid response from server")
+        return
+      }
+      
+      if (response.ok && data.config) {
+        // Use default parameters if profile has none, otherwise use profile parameters
+        const profileParams = data.config.parameters && data.config.parameters.length > 0
+          ? data.config.parameters
+          : DEFAULT_PARAMETERS
+        
+        setParameters(profileParams)
+        setCustomHeaders(data.config.customHeaders || [])
+        // Load X-header removal setting from processing config (default to true if not set)
+        setRemoveXHeaders(
+          data.config.processingConfig?.removeXHeaders !== undefined
+            ? (data.config.processingConfig.removeXHeaders as boolean)
+            : true
+        )
+        setCurrentProfileId(profileId)
+        setHasUnsavedChanges(false)
+        toast.success("Profile applied successfully")
+      } else {
+        const errorMessage = data?.error || `Failed to apply profile: ${response.status} ${response.statusText}`
+        console.error("Failed to apply profile:", errorMessage)
+        toast.error(errorMessage)
+      }
+    } catch (error) {
+      console.error("Failed to apply profile:", error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to apply profile"
+      toast.error(errorMessage)
+    }
+  }, [user])
+
+  // Load profiles from user profile
+  useEffect(() => {
+    const loadProfiles = async () => {
+      if (!user) {
+        setProfiles([])
+        return
+      }
+
+      setLoadingProfiles(true)
+      try {
+        const response = await fetch("/api/header-profiles")
+        if (response.ok) {
+          const data = await response.json()
+          if (data.profiles && data.profiles.length > 0) {
+            setProfiles(data.profiles)
+            // Load default profile if exists
+            const defaultProfile = data.profiles.find((p: { is_default: boolean }) => p.is_default)
+            if (defaultProfile) {
+              handleApplyProfile(defaultProfile.id)
+            }
+          }
+        } else if (response.status === 401) {
+          setProfiles([])
+        }
+      } catch (error) {
+        console.error("Failed to load profiles:", error)
+        setProfiles([])
+      } finally {
+        setLoadingProfiles(false)
+      }
+    }
+
+    loadProfiles()
+  }, [user, handleApplyProfile])
+
   // Process email with custom parameters
   const processEmail = useCallback(
     (input: string): string => {
@@ -175,9 +316,12 @@ const EmailHeaderProcessor = () => {
         "Return-Path:",
         "Delivered-To:",
         "Received: by",
-        "X-Received:",
-        "X-original-To",
       ]
+
+      // Conditionally add X-headers to removal list
+      if (removeXHeaders) {
+        fieldsToRemove.push("X-Received:", "X-original-To")
+      }
 
       // Headers to skip (will be replaced with new ones)
       const headersToSkip = ["List-Unsubscribe:", "List-Unsubscribe-Post:"]
@@ -207,6 +351,18 @@ const EmailHeaderProcessor = () => {
         }
 
         if (inHeader) {
+          // Check if this is an X-header that should be removed
+          if (removeXHeaders && /^X-/i.test(line.trim())) {
+            // Skip continuation lines
+            while (
+              i + 1 < lines.length &&
+              (lines[i + 1].startsWith("\t") || lines[i + 1].startsWith(" "))
+            ) {
+              i++
+            }
+            continue
+          }
+
           // Skip headers that should be removed (including continuation lines)
           if (
             fieldsToRemove.some((field) => line.toLowerCase().startsWith(field.toLowerCase()))
@@ -342,13 +498,34 @@ const EmailHeaderProcessor = () => {
         "List-Unsubscribe-Post: List-Unsubscribe=One-Click",
       ]
 
+      // Process and add custom headers
+      const processedCustomHeaders = customHeaders.map((header) => {
+        let processedHeader = header
+        // Replace all parameter placeholders with their values
+        parameters.forEach((param) => {
+          processedHeader = processedHeader.replace(
+            new RegExp(param.placeholder.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"),
+            param.placeholder
+          )
+        })
+        // Also replace the default placeholders if they're not in parameters
+        processedHeader = processedHeader.replace(/\[\*to\]/g, toPlaceholder)
+        processedHeader = processedHeader.replace(/\[P_RPATH\]/g, rpathPlaceholder)
+        processedHeader = processedHeader.replace(/\[EID\]/g, eidPlaceholder)
+        processedHeader = processedHeader.replace(/\[RNDS\]/g, rndsPlaceholder)
+        return processedHeader
+      })
+
+      // Combine standard headers and custom headers
+      const allHeadersToInsert = [...headersToInsert, ...processedCustomHeaders]
+
       if (insertIndex !== -1) {
-        outputLines.splice(insertIndex, 0, ...headersToInsert)
+        outputLines.splice(insertIndex, 0, ...allHeadersToInsert)
       }
 
       return outputLines.join("\n")
     },
-    [parameters]
+    [parameters, customHeaders, removeXHeaders]
   )
 
   const handleFilesUpload = useCallback(
@@ -648,9 +825,85 @@ const EmailHeaderProcessor = () => {
 
   const handleResetToDefaults = useCallback(() => {
     setParameters(DEFAULT_PARAMETERS)
+    setCustomHeaders([])
     setHasUnsavedChanges(true)
     toast.success("Reset to default parameters")
   }, [])
+
+  const handleSaveAsProfile = useCallback(async () => {
+    if (!user) {
+      toast.error("Please sign in to save profiles")
+      return
+    }
+
+    if (!newProfileName.trim()) {
+      toast.error("Please enter a profile name")
+      return
+    }
+
+    setSavingProfile(true)
+    try {
+      const parameterIds = parameters.map((p) => p.id).filter((id) => !id.startsWith("default-") && !id.startsWith("new-"))
+      
+      const response = await fetch("/api/header-profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newProfileName.trim(),
+          description: newProfileDescription.trim() || null,
+          custom_headers: customHeaders,
+          processing_config: {
+            removeXHeaders: removeXHeaders,
+          },
+          parameter_ids: parameterIds,
+          is_default: false,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setProfiles((prev) => [...prev, data.profile])
+        setNewProfileName("")
+        setNewProfileDescription("")
+        setShowProfilesDialog(false)
+        setHasUnsavedChanges(false)
+        toast.success("Profile saved successfully!")
+      } else {
+        const errorData = await response.json()
+        toast.error(errorData.error || "Failed to save profile")
+      }
+    } catch (error) {
+      console.error("Failed to save profile:", error)
+      toast.error("Failed to save profile. Please try again.")
+    } finally {
+      setSavingProfile(false)
+    }
+  }, [user, parameters, customHeaders, newProfileName, newProfileDescription])
+
+  const handleDeleteProfile = useCallback(async (profileId: string) => {
+    if (!user) return
+
+    try {
+      const response = await fetch(`/api/header-profiles/${profileId}`, {
+        method: "DELETE",
+      })
+
+      if (response.ok) {
+        setProfiles((prev) => prev.filter((p) => p.id !== profileId))
+        if (currentProfileId === profileId) {
+          setCurrentProfileId(null)
+          setParameters(DEFAULT_PARAMETERS)
+          setCustomHeaders([])
+        }
+        toast.success("Profile deleted successfully")
+      } else {
+        toast.error("Failed to delete profile")
+      }
+    } catch (error) {
+      console.error("Failed to delete profile:", error)
+      toast.error("Failed to delete profile")
+    }
+  }, [user, currentProfileId])
 
   const stats = useMemo(() => {
     const total = files.length
@@ -682,18 +935,71 @@ const EmailHeaderProcessor = () => {
               </p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => setShowParametersDialog(true)}
-            className="gap-2"
-            aria-label="Configure header parameters"
-          >
-            <Settings2 size={16} />
-            <span className="hidden sm:inline">Parameters</span>
-            {hasUnsavedChanges && (
-              <span className="h-2 w-2 rounded-full bg-amber-500" />
+          <div className="flex gap-2">
+            {user && profiles.length > 0 && (
+              <Select
+                value={currentProfileId || "none"}
+                onValueChange={(value) => {
+                  if (value === "none") {
+                    setCurrentProfileId(null)
+                    setParameters(DEFAULT_PARAMETERS)
+                    setCustomHeaders([])
+                  } else if (value === "manage") {
+                    setShowProfilesDialog(true)
+                  } else {
+                    handleApplyProfile(value)
+                  }
+                }}
+              >
+                <SelectTrigger className="w-[180px] gap-2">
+                  <Bookmark size={14} />
+                  <SelectValue placeholder="Select profile" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Profile</SelectItem>
+                  {profiles.map((profile) => (
+                    <SelectItem key={profile.id} value={profile.id}>
+                      {profile.name}
+                      {profile.is_default && " (Default)"}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="manage">Manage Profiles...</SelectItem>
+                </SelectContent>
+              </Select>
             )}
-          </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowParametersDialog(true)}
+              className="gap-2"
+              aria-label="Configure header parameters"
+            >
+              <Settings2 size={16} />
+              <span className="hidden sm:inline">Parameters</span>
+              {hasUnsavedChanges && (
+                <span className="h-2 w-2 rounded-full bg-amber-500" />
+              )}
+            </Button>
+            {user && (
+              <Button
+                variant="outline"
+                onClick={() => setShowProfilesDialog(true)}
+                className="gap-2"
+                aria-label="Manage profiles"
+              >
+                <BookmarkCheck size={16} />
+                <span className="hidden sm:inline">Profiles</span>
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => setShowGuideDialog(true)}
+              className="gap-2"
+              aria-label="View guide"
+            >
+              <HelpCircle size={16} />
+              <span className="hidden sm:inline">Guide</span>
+            </Button>
+          </div>
         </div>
 
         {files.length > 0 && (
@@ -905,58 +1211,183 @@ const EmailHeaderProcessor = () => {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
                 <Code2 size={20} />
-                {selectedFile ? selectedFile.name : "Preview"}
+                {pasteMode ? "Paste & Process" : selectedFile ? selectedFile.name : "Preview"}
               </h2>
-              {selectedFile && selectedFile.status === "completed" && (
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => copyToClipboard(selectedFile.processedContent)}
-                    className="gap-2"
-                    aria-label="Copy processed content to clipboard"
-                  >
-                    {copied ? <Check size={16} /> : <Copy size={16} />}
-                    <span className="hidden sm:inline">{copied ? "Copied" : "Copy"}</span>
-                  </Button>
-                  {!disableIndividualDownloads && (
+              <div className="flex gap-2">
+                <Button
+                  variant={pasteMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setPasteMode(!pasteMode)
+                    if (pasteMode) {
+                      setPastedContent("")
+                      setPastedProcessedContent("")
+                    }
+                  }}
+                  className="gap-2"
+                  aria-label={pasteMode ? "Switch to file mode" : "Switch to paste mode"}
+                >
+                  {pasteMode ? <FileText size={16} /> : <FileText size={16} />}
+                  <span className="hidden sm:inline">{pasteMode ? "File Mode" : "Paste Mode"}</span>
+                </Button>
+                {pasteMode && pastedProcessedContent && (
+                  <>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleDownloadSingle(selectedFile.id)}
+                      onClick={() => copyToClipboard(pastedProcessedContent)}
                       className="gap-2"
-                      aria-label="Download processed file"
+                      aria-label="Copy processed content to clipboard"
+                    >
+                      {copied ? <Check size={16} /> : <Copy size={16} />}
+                      <span className="hidden sm:inline">{copied ? "Copied" : "Copy"}</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const blob = new Blob([pastedProcessedContent], { type: "text/plain" })
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement("a")
+                        a.href = url
+                        a.download = `processed-paste-${Date.now()}.txt`
+                        document.body.appendChild(a)
+                        a.click()
+                        document.body.removeChild(a)
+                        URL.revokeObjectURL(url)
+                        toast.success("Downloaded processed content")
+                      }}
+                      className="gap-2"
+                      aria-label="Download processed content"
                     >
                       <Download size={16} />
                       <span className="hidden sm:inline">Download</span>
                     </Button>
-                  )}
-                </div>
-              )}
+                  </>
+                )}
+                {!pasteMode && selectedFile && selectedFile.status === "completed" && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copyToClipboard(selectedFile.processedContent)}
+                      className="gap-2"
+                      aria-label="Copy processed content to clipboard"
+                    >
+                      {copied ? <Check size={16} /> : <Copy size={16} />}
+                      <span className="hidden sm:inline">{copied ? "Copied" : "Copy"}</span>
+                    </Button>
+                    {!disableIndividualDownloads && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDownloadSingle(selectedFile.id)}
+                        className="gap-2"
+                        aria-label="Download processed file"
+                      >
+                        <Download size={16} />
+                        <span className="hidden sm:inline">Download</span>
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-2">Original</h3>
-                <pre className="w-full h-[600px] p-4 font-mono text-xs bg-card border border-border rounded-lg overflow-auto whitespace-pre-wrap wrap-break-word">
-                  {selectedFile ? (
-                    <code className="text-foreground">{selectedFile.originalContent}</code>
-                  ) : (
-                    <code className="text-muted-foreground">No file selected</code>
-                  )}
-                </pre>
+            {pasteMode ? (
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-muted-foreground">Paste Email Content</h3>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setPastedContent("")
+                        setPastedProcessedContent("")
+                      }}
+                      disabled={!pastedContent && !pastedProcessedContent}
+                      aria-label="Clear pasted content"
+                    >
+                      <Trash2 size={14} />
+                      <span className="ml-1">Clear</span>
+                    </Button>
+                  </div>
+                  <textarea
+                    value={pastedContent}
+                    onChange={(e) => setPastedContent(e.target.value)}
+                    placeholder="Paste your email content here..."
+                    className="w-full h-[300px] p-4 font-mono text-xs bg-card border border-border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                    aria-label="Paste email content"
+                  />
+                  <Button
+                    onClick={async () => {
+                      if (!pastedContent.trim()) {
+                        toast.error("Please paste some content first")
+                        return
+                      }
+                      setPastedProcessing(true)
+                      try {
+                        await new Promise((resolve) => setTimeout(resolve, 50))
+                        const processed = processEmail(pastedContent)
+                        setPastedProcessedContent(processed)
+                        toast.success("Content processed successfully!")
+                      } catch (error) {
+                        console.error("Processing error:", error)
+                        toast.error("Failed to process content")
+                      } finally {
+                        setPastedProcessing(false)
+                      }
+                    }}
+                    disabled={!pastedContent.trim() || pastedProcessing}
+                    className="w-full mt-2 gap-2"
+                  >
+                    {pastedProcessing ? (
+                      <>
+                        <RefreshCw size={16} className="animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <Zap size={16} />
+                        Process Pasted Content
+                      </>
+                    )}
+                  </Button>
+                </div>
+                {pastedProcessedContent && (
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground mb-2">Processed Result</h3>
+                    <pre className="w-full h-[300px] p-4 font-mono text-xs bg-card border border-border rounded-lg overflow-auto whitespace-pre-wrap wrap-break-word">
+                      <code className="text-foreground">{pastedProcessedContent}</code>
+                    </pre>
+                  </div>
+                )}
               </div>
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-2">Processed</h3>
-                <pre className="w-full h-[600px] p-4 font-mono text-xs bg-card border border-border rounded-lg overflow-auto whitespace-pre-wrap wrap-break-word">
-                  {selectedFile ? (
-                    <code className="text-foreground">{selectedFile.processedContent}</code>
-                  ) : (
-                    <code className="text-muted-foreground">No file selected</code>
-                  )}
-                </pre>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Original</h3>
+                  <pre className="w-full h-[600px] p-4 font-mono text-xs bg-card border border-border rounded-lg overflow-auto whitespace-pre-wrap wrap-break-word">
+                    {selectedFile ? (
+                      <code className="text-foreground">{selectedFile.originalContent}</code>
+                    ) : (
+                      <code className="text-muted-foreground">No file selected</code>
+                    )}
+                  </pre>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Processed</h3>
+                  <pre className="w-full h-[600px] p-4 font-mono text-xs bg-card border border-border rounded-lg overflow-auto whitespace-pre-wrap wrap-break-word">
+                    {selectedFile ? (
+                      <code className="text-foreground">{selectedFile.processedContent}</code>
+                    ) : (
+                      <code className="text-muted-foreground">No file selected</code>
+                    )}
+                  </pre>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
@@ -1131,6 +1562,150 @@ const EmailHeaderProcessor = () => {
                 Add Parameter
               </Button>
             </div>
+
+            {/* X-Header Removal Option */}
+            <div className="space-y-2 border-t pt-4">
+              <Label className="text-sm font-medium">Processing Options</Label>
+              <div className="flex items-center space-x-2 rounded-lg border bg-card p-3">
+                <Checkbox
+                  id="remove-x-headers"
+                  checked={removeXHeaders}
+                  onChange={(e) => {
+                    setRemoveXHeaders(e.target.checked)
+                    setHasUnsavedChanges(true)
+                  }}
+                  label="Remove all X-headers"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                When enabled, all headers starting with "X-" (e.g., X-Received, X-Original-To, X-Mailer) will be removed during processing.
+              </p>
+            </div>
+
+            {/* Custom Headers Section */}
+            <div className="space-y-2 border-t pt-4">
+              <Label className="text-sm font-medium">Custom Headers</Label>
+              <p className="text-xs text-muted-foreground">
+                Add custom headers that will be inserted into processed emails. You can use placeholders like [*to], [P_RPATH], etc.
+              </p>
+              <div className="space-y-2">
+                {customHeaders.map((header, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3"
+                  >
+                    {editingCustomHeader?.index === index ? (
+                      <div className="flex-1 flex gap-2">
+                        <Input
+                          value={editingCustomHeader.value}
+                          onChange={(e) =>
+                            setEditingCustomHeader({
+                              index,
+                              value: e.target.value,
+                            })
+                          }
+                          placeholder="e.g., Cc: [*to]"
+                          className="flex-1"
+                          aria-label="Edit custom header"
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            if (editingCustomHeader.value.trim()) {
+                              const updated = [...customHeaders]
+                              updated[index] = editingCustomHeader.value.trim()
+                              setCustomHeaders(updated)
+                              setHasUnsavedChanges(true)
+                              setEditingCustomHeader(null)
+                              toast.success("Custom header updated")
+                            }
+                          }}
+                          aria-label="Save custom header"
+                        >
+                          <Check size={14} />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditingCustomHeader(null)}
+                          aria-label="Cancel editing"
+                        >
+                          <X size={14} />
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <code className="flex-1 rounded bg-muted px-2 py-1 text-xs font-mono">
+                          {header}
+                        </code>
+                        <div className="flex gap-1 shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditingCustomHeader({ index, value: header })}
+                            className="h-7 w-7 p-0"
+                            aria-label={`Edit ${header}`}
+                          >
+                            <Pencil size={14} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setCustomHeaders(customHeaders.filter((_, i) => i !== index))
+                              setHasUnsavedChanges(true)
+                              toast.success("Custom header removed")
+                            }}
+                            className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                            aria-label={`Delete ${header}`}
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+                {customHeaders.length === 0 && (
+                  <div className="text-center py-4 text-muted-foreground text-sm">
+                    No custom headers. Add one below.
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="e.g., Cc: [*to]"
+                  value={newCustomHeader}
+                  onChange={(e) => setNewCustomHeader(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newCustomHeader.trim()) {
+                      setCustomHeaders([...customHeaders, newCustomHeader.trim()])
+                      setNewCustomHeader("")
+                      setHasUnsavedChanges(true)
+                      toast.success("Custom header added")
+                    }
+                  }}
+                  aria-label="New custom header"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (newCustomHeader.trim()) {
+                      setCustomHeaders([...customHeaders, newCustomHeader.trim()])
+                      setNewCustomHeader("")
+                      setHasUnsavedChanges(true)
+                      toast.success("Custom header added")
+                    }
+                  }}
+                  disabled={!newCustomHeader.trim()}
+                  className="gap-2"
+                >
+                  <Plus size={14} />
+                  Add
+                </Button>
+              </div>
+            </div>
           </div>
 
           <DialogFooter className="flex-col sm:flex-row gap-2 border-t pt-4">
@@ -1165,6 +1740,142 @@ const EmailHeaderProcessor = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Profiles Dialog */}
+      <Dialog open={showProfilesDialog} onOpenChange={setShowProfilesDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookmarkCheck size={20} />
+              Header Processing Profiles
+            </DialogTitle>
+            <DialogDescription>
+              Save and manage different header processing configurations as profiles.
+              {!user && " Sign in to create and manage profiles."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Existing Profiles */}
+            {user && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Saved Profiles</Label>
+                {loadingProfiles ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {profiles.map((profile) => (
+                      <div
+                        key={profile.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">{profile.name}</span>
+                            {profile.is_default && (
+                              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
+                                Default
+                              </span>
+                            )}
+                          </div>
+                          {profile.description && (
+                            <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                              {profile.description}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              handleApplyProfile(profile.id)
+                              setShowProfilesDialog(false)
+                            }}
+                            className="h-7 px-2"
+                            aria-label={`Apply ${profile.name}`}
+                          >
+                            Apply
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteProfile(profile.id)}
+                            className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                            aria-label={`Delete ${profile.name}`}
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    {profiles.length === 0 && (
+                      <div className="text-center py-4 text-muted-foreground text-sm">
+                        No profiles saved. Create one below.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Save Current Configuration as Profile */}
+            {user && (
+              <div className="space-y-2 border-t pt-4">
+                <Label className="text-sm font-medium">Save Current Configuration as Profile</Label>
+                <Input
+                  placeholder="Profile name"
+                  value={newProfileName}
+                  onChange={(e) => setNewProfileName(e.target.value)}
+                  aria-label="New profile name"
+                />
+                <Input
+                  placeholder="Description (optional)"
+                  value={newProfileDescription}
+                  onChange={(e) => setNewProfileDescription(e.target.value)}
+                  aria-label="New profile description"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSaveAsProfile}
+                  disabled={!newProfileName.trim() || savingProfile}
+                  className="w-full gap-2"
+                >
+                  {savingProfile ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={14} />
+                      Save Profile
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {!user && (
+              <div className="text-center py-4 text-muted-foreground text-sm">
+                Please sign in to create and manage profiles.
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowProfilesDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* App Guide Dialog */}
+      <AppGuide open={showGuideDialog} onOpenChange={setShowGuideDialog} />
     </div>
   )
 }
