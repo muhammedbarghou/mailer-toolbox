@@ -123,28 +123,19 @@ export const createHeaderProfile = async (
   try {
     const supabase = await createClient();
 
-    // If this is set as default, unset other defaults for this user
-    if (input.is_default) {
-      await supabase
-        .from("header_processing_profiles")
-        .update({ is_default: false })
-        .eq("user_id", userId)
-        .eq("is_default", true);
-    }
-
-    // Create the profile
-    const { data: profile, error: profileError } = await supabase
-      .from("header_processing_profiles")
-      .insert({
-        user_id: userId,
-        name: input.name.trim(),
-        description: input.description?.trim() || null,
-        custom_headers: input.custom_headers || [],
-        processing_config: input.processing_config || {},
-        is_default: input.is_default || false,
-      })
-      .select()
-      .single();
+    // Use atomic database function to create profile with default handling
+    // This ensures the "unset other defaults" + "insert new profile" happens atomically
+    const { data: profile, error: profileError } = await supabase.rpc(
+      "create_header_profile_atomic",
+      {
+        p_user_id: userId,
+        p_name: input.name.trim(),
+        p_description: input.description?.trim() || null,
+        p_custom_headers: input.custom_headers || [],
+        p_processing_config: input.processing_config || {},
+        p_is_default: input.is_default || false,
+      }
+    );
 
     if (profileError || !profile) {
       return { data: null, error: profileError?.message || "Failed to create profile" };
@@ -187,43 +178,17 @@ export const updateHeaderProfile = async (
   try {
     const supabase = await createClient();
 
-    // If setting as default, unset other defaults
-    if (updates.is_default) {
-      await supabase
-        .from("header_processing_profiles")
-        .update({ is_default: false })
-        .eq("user_id", userId)
-        .eq("is_default", true)
-        .neq("id", profileId);
-    }
-
-    const updateData: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-    };
-
-    if (updates.name !== undefined) {
-      updateData.name = updates.name.trim();
-    }
-    if (updates.description !== undefined) {
-      updateData.description = updates.description?.trim() || null;
-    }
-    if (updates.custom_headers !== undefined) {
-      updateData.custom_headers = updates.custom_headers;
-    }
-    if (updates.processing_config !== undefined) {
-      updateData.processing_config = updates.processing_config;
-    }
-    if (updates.is_default !== undefined) {
-      updateData.is_default = updates.is_default;
-    }
-
-    const { data, error } = await supabase
-      .from("header_processing_profiles")
-      .update(updateData)
-      .eq("id", profileId)
-      .eq("user_id", userId)
-      .select()
-      .single();
+    // Use atomic database function to update profile with default handling
+    // This ensures the "unset other defaults" + "update profile" happens atomically
+    const { data, error } = await supabase.rpc("update_header_profile_atomic", {
+      p_profile_id: profileId,
+      p_user_id: userId,
+      p_name: updates.name !== undefined ? updates.name.trim() : null,
+      p_description: updates.description !== undefined ? updates.description?.trim() || null : null,
+      p_custom_headers: updates.custom_headers !== undefined ? updates.custom_headers : null,
+      p_processing_config: updates.processing_config !== undefined ? updates.processing_config : null,
+      p_is_default: updates.is_default !== undefined ? updates.is_default : null,
+    });
 
     if (error) {
       console.error("Error updating header profile:", error);

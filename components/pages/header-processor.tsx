@@ -132,6 +132,12 @@ const EmailHeaderProcessor = () => {
 
   // X-header removal state
   const [removeXHeaders, setRemoveXHeaders] = useState<boolean>(true)
+  
+  // List-Unsubscribe headers state
+  const [addListUnsubscribe, setAddListUnsubscribe] = useState<boolean>(true)
+  
+  // Date header replacement state
+  const [replaceDateHeader, setReplaceDateHeader] = useState<boolean>(false)
 
   // Profile state
   const [profiles, setProfiles] = useState<Array<{ id: string; name: string; description: string | null; is_default: boolean }>>([])
@@ -241,6 +247,18 @@ const EmailHeaderProcessor = () => {
           data.config.processingConfig?.removeXHeaders !== undefined
             ? (data.config.processingConfig.removeXHeaders as boolean)
             : true
+        )
+        // Load List-Unsubscribe setting from processing config (default to true if not set)
+        setAddListUnsubscribe(
+          data.config.processingConfig?.addListUnsubscribe !== undefined
+            ? (data.config.processingConfig.addListUnsubscribe as boolean)
+            : true
+        )
+        // Load Date header replacement setting from processing config (default to false if not set)
+        setReplaceDateHeader(
+          data.config.processingConfig?.replaceDateHeader !== undefined
+            ? (data.config.processingConfig.replaceDateHeader as boolean)
+            : false
         )
         setCurrentProfileId(profileId)
         setHasUnsavedChanges(false)
@@ -466,10 +484,32 @@ const EmailHeaderProcessor = () => {
               i++
               outputLines.push(lines[i].trimEnd())
             }
+          } else if (line.startsWith("Date:")) {
+            // Handle Date header based on replaceDateHeader setting
+            if (replaceDateHeader) {
+              // Replace with placeholder
+              outputLines.push("Date: [date*]")
+              // Skip continuation lines if any
+              while (
+                i + 1 < lines.length &&
+                (lines[i + 1].startsWith("\t") || lines[i + 1].startsWith(" "))
+              ) {
+                i++
+              }
+            } else {
+              // Keep original Date header with continuation lines
+              outputLines.push(line)
+              while (
+                i + 1 < lines.length &&
+                (lines[i + 1].startsWith("\t") || lines[i + 1].startsWith(" "))
+              ) {
+                i++
+                outputLines.push(lines[i].trimEnd())
+              }
+            }
           } else if (
             line.startsWith("MIME-Version:") ||
             line.startsWith("Subject:") ||
-            line.startsWith("Date:") ||
             line.startsWith("Reply-To:") ||
             line.startsWith("Content-Transfer-Encoding:")
           ) {
@@ -492,11 +532,14 @@ const EmailHeaderProcessor = () => {
             ? outputLines.findIndex((line) => line === "")
             : outputLines.length
 
-      // Add required headers using placeholders
-      const headersToInsert: string[] = [
-        `List-Unsubscribe: <mailto:unsubscribe@${rpathPlaceholder}>, <http://${rpathPlaceholder}/unsubscribe?email=abuse@${rpathPlaceholder}>`,
-        "List-Unsubscribe-Post: List-Unsubscribe=One-Click",
-      ]
+      // Add List-Unsubscribe headers if enabled
+      const headersToInsert: string[] = []
+      if (addListUnsubscribe) {
+        headersToInsert.push(
+          `List-Unsubscribe: <mailto:unsubscribe@${rpathPlaceholder}>, <http://${rpathPlaceholder}/unsubscribe?email=abuse@${rpathPlaceholder}>`,
+          "List-Unsubscribe-Post: List-Unsubscribe=One-Click"
+        )
+      }
 
       // Process and add custom headers
       const processedCustomHeaders = customHeaders.map((header) => {
@@ -525,7 +568,7 @@ const EmailHeaderProcessor = () => {
 
       return outputLines.join("\n")
     },
-    [parameters, customHeaders, removeXHeaders]
+    [parameters, customHeaders, removeXHeaders, addListUnsubscribe, replaceDateHeader]
   )
 
   const handleFilesUpload = useCallback(
@@ -826,6 +869,9 @@ const EmailHeaderProcessor = () => {
   const handleResetToDefaults = useCallback(() => {
     setParameters(DEFAULT_PARAMETERS)
     setCustomHeaders([])
+    setRemoveXHeaders(true)
+    setAddListUnsubscribe(true)
+    setReplaceDateHeader(false)
     setHasUnsavedChanges(true)
     toast.success("Reset to default parameters")
   }, [])
@@ -854,6 +900,8 @@ const EmailHeaderProcessor = () => {
           custom_headers: customHeaders,
           processing_config: {
             removeXHeaders: removeXHeaders,
+            addListUnsubscribe: addListUnsubscribe,
+            replaceDateHeader: replaceDateHeader,
           },
           parameter_ids: parameterIds,
           is_default: false,
@@ -878,7 +926,7 @@ const EmailHeaderProcessor = () => {
     } finally {
       setSavingProfile(false)
     }
-  }, [user, parameters, customHeaders, newProfileName, newProfileDescription])
+  }, [user, parameters, customHeaders, removeXHeaders, addListUnsubscribe, replaceDateHeader, newProfileName, newProfileDescription])
 
   const handleDeleteProfile = useCallback(async (profileId: string) => {
     if (!user) return
@@ -1563,9 +1611,11 @@ const EmailHeaderProcessor = () => {
               </Button>
             </div>
 
-            {/* X-Header Removal Option */}
+            {/* Processing Options */}
             <div className="space-y-2 border-t pt-4">
               <Label className="text-sm font-medium">Processing Options</Label>
+              
+              {/* X-Header Removal Option */}
               <div className="flex items-center space-x-2 rounded-lg border bg-card p-3">
                 <Checkbox
                   id="remove-x-headers"
@@ -1577,8 +1627,40 @@ const EmailHeaderProcessor = () => {
                   label="Remove all X-headers"
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground mb-4">
                 When enabled, all headers starting with "X-" (e.g., X-Received, X-Original-To, X-Mailer) will be removed during processing.
+              </p>
+              
+              {/* List-Unsubscribe Option */}
+              <div className="flex items-center space-x-2 rounded-lg border bg-card p-3">
+                <Checkbox
+                  id="add-list-unsubscribe"
+                  checked={addListUnsubscribe}
+                  onChange={(e) => {
+                    setAddListUnsubscribe(e.target.checked)
+                    setHasUnsavedChanges(true)
+                  }}
+                  label="Add List-Unsubscribe headers"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                When enabled, List-Unsubscribe and List-Unsubscribe-Post headers will be added to processed emails.
+              </p>
+              
+              {/* Date Header Replacement Option */}
+              <div className="flex items-center space-x-2 rounded-lg border bg-card p-3">
+                <Checkbox
+                  id="replace-date-header"
+                  checked={replaceDateHeader}
+                  onChange={(e) => {
+                    setReplaceDateHeader(e.target.checked)
+                    setHasUnsavedChanges(true)
+                  }}
+                  label="Replace Date header with [date*]"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                When enabled, the original Date header will be replaced with "Date: [date*]". When disabled, the original Date header is kept.
               </p>
             </div>
 
