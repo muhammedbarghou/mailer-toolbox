@@ -38,15 +38,9 @@ import {
   type AIModel,
 } from "@/lib/ai-providers"
 
-interface RewrittenSubject {
-  original: string
-  rewritten: string[]
-  changes: string
-}
-
 const SubjectRewrite = () => {
   const [subjectsInput, setSubjectsInput] = useState("")
-  const [results, setResults] = useState<RewrittenSubject[]>([])
+  const [results, setResults] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [rateLimitInfo, setRateLimitInfo] = useState<{
     remaining: number
@@ -110,10 +104,10 @@ const SubjectRewrite = () => {
       }
 
       const data = await response.json()
-      setResults(data.results || [])
+      setResults(data.rewritten || [])
       setRateLimitInfo(data.rateLimit || null)
 
-      toast.success(`Successfully generated ${data.results?.length || 0} rewritten subject line sets`)
+      toast.success(`Successfully generated ${data.rewritten?.length || 0} optimized alternatives`)
     } catch (error) {
       console.error("Error rewriting subject lines:", error)
       toast.error(error instanceof Error ? error.message : "Failed to rewrite subject lines")
@@ -125,22 +119,11 @@ const SubjectRewrite = () => {
   const handleCopyAll = async () => {
     if (results.length === 0) return
 
-    const allRewritten = results.flatMap((result) => result.rewritten)
-    const textToCopy = allRewritten.join("\n")
+    const textToCopy = results.join("\n")
 
     try {
       await navigator.clipboard.writeText(textToCopy)
-      toast.success(`Copied ${allRewritten.length} subject lines to clipboard`)
-    } catch (error) {
-      console.error("Failed to copy to clipboard:", error)
-      toast.error("Failed to copy to clipboard. Please try again.")
-    }
-  }
-
-  const handleCopyResult = async (rewritten: string[]) => {
-    try {
-      await navigator.clipboard.writeText(rewritten.join("\n"))
-      toast.success(`Copied ${rewritten.length} subject lines to clipboard`)
+      toast.success(`Copied ${results.length} subject lines to clipboard`)
     } catch (error) {
       console.error("Failed to copy to clipboard:", error)
       toast.error("Failed to copy to clipboard. Please try again.")
@@ -154,7 +137,6 @@ const SubjectRewrite = () => {
   }
 
   const inputLineCount = subjectsInput.split("\n").filter((l) => l.trim().length > 0).length
-  const totalRewrittenCount = results.reduce((sum, r) => sum + r.rewritten.length, 0)
 
   const formatResetTime = (timestamp: number) => {
     const date = new Date(timestamp)
@@ -354,53 +336,25 @@ const SubjectRewrite = () => {
                 </div>
                 <div className="flex-1">
                   <CardTitle>Rewritten Alternatives</CardTitle>
-                  <CardDescription>20 optimized per line</CardDescription>
+                  <CardDescription>10 optimized alternatives</CardDescription>
                 </div>
               </div>
-              {totalRewrittenCount > 0 && (
+              {results.length > 0 && (
                 <div className="mt-3 text-xs font-mono text-muted-foreground">
-                  {totalRewrittenCount} total generated
+                  {results.length} alternatives generated
                 </div>
               )}
             </CardHeader>
             <CardContent className="space-y-4 relative z-10 flex-1 flex flex-col">
               {results.length > 0 ? (
                 <>
-                  <div className="space-y-4 flex-1 overflow-y-auto max-h-[400px]">
-                    {results.map((result, index) => (
+                  <div className="space-y-2 flex-1 overflow-y-auto max-h-[400px]">
+                    {results.map((subject, index) => (
                       <div
                         key={index}
-                        className="p-4 rounded-lg border bg-muted/30 space-y-3 hover:border-primary/30 transition-colors"
+                        className="text-sm p-3 rounded-lg bg-background/50 border border-border/50 hover:border-primary/30 hover:bg-background/70 transition-colors line-clamp-2"
                       >
-                        <div>
-                          <div className="text-xs font-semibold text-muted-foreground mb-1">Original</div>
-                          <div className="text-sm font-medium text-foreground line-clamp-2">{result.original}</div>
-                          {result.changes && (
-                            <div className="text-xs text-muted-foreground italic mt-1.5 leading-relaxed">
-                              {result.changes}
-                            </div>
-                          )}
-                        </div>
-                        <div className="border-t pt-3">
-                          <div className="text-xs font-semibold text-muted-foreground mb-2">
-                            {result.rewritten.length} Alternatives
-                          </div>
-                          <div className="space-y-1.5">
-                            {result.rewritten.slice(0, 3).map((subject, subIndex) => (
-                              <div
-                                key={subIndex}
-                                className="text-xs p-2 rounded bg-background/50 border border-border/50 hover:border-primary/30 transition-colors line-clamp-1"
-                              >
-                                {subject}
-                              </div>
-                            ))}
-                            {result.rewritten.length > 3 && (
-                              <div className="text-xs text-muted-foreground p-2 italic">
-                                +{result.rewritten.length - 3} more...
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                        {subject}
                       </div>
                     ))}
                   </div>
@@ -485,9 +439,9 @@ const SubjectRewrite = () => {
                       <TrendingUp className="h-5 w-5 text-primary" />
                     </div>
                     <div className="flex-1 space-y-1">
-                      <h3 className="font-semibold text-base">Multiple Variants</h3>
+                      <h3 className="font-semibold text-base">Optimized Alternatives</h3>
                       <p className="text-sm text-muted-foreground leading-relaxed">
-                        Get 20 unique alternatives for A/B testing and maximum flexibility.
+                        Get 10 unique, optimized alternatives synthesized from all your input subjects.
                       </p>
                     </div>
                   </div>

@@ -17,27 +17,30 @@ const getSystemPrompt = () => {
   } catch (error) {
     console.error("Error reading subject.txt:", error);
     // Fallback prompt if file can't be read
-    return `You are an elite email marketing specialist with deep expertise in email deliverability, spam filter algorithms, and subject line optimization. Your mission is to analyze ONE email subject line and rewrite it to maximize inbox placement, open rates, and engagement while completely eliminating spam triggers.
+    return `You are an elite email marketing specialist with deep expertise in email deliverability, spam filter algorithms, and subject line optimization. Your mission is to analyze a collection of email subject lines together and synthesize them into optimized alternatives that maximize inbox placement, open rates, and engagement while completely eliminating spam triggers.
 
-When I provide you with ONE subject line, you will evaluate it against established best practices and rewrite it into deliverable alternatives. You will maintain the core message and intent while transforming the vocabulary, structure, and formatting to bypass spam filters and appeal to human recipients.
+When I provide you with multiple subject lines, you will analyze them collectively to identify common themes, patterns, and value propositions. You will then generate exactly 10 (ten) optimized subject line alternatives that capture the best elements from all the input subjects while applying all spam-filter avoidance techniques.
 
-CRITICAL: You will receive ONE subject line at a time. For that ONE subject line, you MUST generate EXACTLY 20 (twenty) rewritten alternatives. Format your response as a JSON object (NOT an array) with:
-- "original": the original subject line exactly as provided
-- "rewritten": an array of EXACTLY 20 rewritten alternatives (no more, no less)
-- "changes": a brief explanation of what was corrected
+CRITICAL: You will receive multiple subject lines to analyze together. You MUST generate EXACTLY 10 (ten) optimized alternatives total - no more, no less. Format your response as a JSON object with:
+- "rewritten": an array of EXACTLY 10 optimized subject lines (no more, no less)
 
 Example format:
 {
-  "original": "FREE SHIPPING TODAY!!!",
   "rewritten": [
-    "Complimentary delivery available",
-    "Free shipping this week",
-    ...exactly 20 total alternatives...
-  ],
-  "changes": "Removed all-caps, replaced FREE with complimentary, eliminated excessive punctuation"
+    "First optimized subject line",
+    "Second optimized subject line",
+    "Third optimized subject line",
+    "Fourth optimized subject line",
+    "Fifth optimized subject line",
+    "Sixth optimized subject line",
+    "Seventh optimized subject line",
+    "Eighth optimized subject line",
+    "Ninth optimized subject line",
+    "Tenth optimized subject line"
+  ]
 }
 
-Remember: You are processing ONE subject line and must return EXACTLY 20 alternatives for that single subject line.`;
+Remember: You are analyzing ALL input subjects together and must return EXACTLY 10 alternatives total that synthesize the best elements from all of them.`;
   }
 };
 
@@ -231,227 +234,204 @@ export async function POST(request: NextRequest) {
     }
 
     // Prepare the prompt for the AI
-    // Process each subject individually to ensure we get 20 alternatives per subject
-    const results: any[] = [];
+    // Analyze all subjects together and generate 10 optimized alternatives total
+    const subjectsList = subjects.map((s: string, idx: number) => `${idx + 1}. "${s.replace(/"/g, '\\"')}"`).join('\n');
     
-    for (let i = 0; i < subjects.length; i++) {
-      const subject = subjects[i];
-      const subjectNumber = i + 1;
-      const totalSubjects = subjects.length;
-      
-      const userPrompt = `You are rewriting ONE SINGLE subject line. This is subject ${subjectNumber} of ${totalSubjects} total subjects.
+    const userPrompt = `You are analyzing ${subjects.length} subject line(s) together to identify common themes, patterns, and value propositions.
 
 CRITICAL REQUIREMENTS - READ CAREFULLY:
-1. You are processing ONLY ONE subject line: "${subject.replace(/"/g, '\\"')}"
-2. You MUST generate EXACTLY 20 (twenty) rewritten alternatives for THIS ONE subject line
-3. Each alternative must be unique, optimized, and different from the others
-4. Return ONLY a JSON object (NOT an array) with this EXACT structure:
+1. Analyze ALL the following subject lines together as a collection
+2. Identify common themes, patterns, and value propositions across all of them
+3. Generate EXACTLY 10 (ten) optimized subject line alternatives that synthesize the best elements from all input subjects
+4. Each alternative must be unique, optimized, and different from the others
+5. Return ONLY a JSON object (NOT an array) with this EXACT structure:
 
 {
-  "original": "${subject.replace(/"/g, '\\"')}",
   "rewritten": [
-    "alternative 1",
-    "alternative 2",
-    "alternative 3",
-    "alternative 4",
-    "alternative 5",
-    "alternative 6",
-    "alternative 7",
-    "alternative 8",
-    "alternative 9",
-    "alternative 10",
-    "alternative 11",
-    "alternative 12",
-    "alternative 13",
-    "alternative 14",
-    "alternative 15",
-    "alternative 16",
-    "alternative 17",
-    "alternative 18",
-    "alternative 19",
-    "alternative 20"
-  ],
-  "changes": "brief explanation of what was corrected"
+    "First optimized subject line",
+    "Second optimized subject line",
+    "Third optimized subject line",
+    "Fourth optimized subject line",
+    "Fifth optimized subject line",
+    "Sixth optimized subject line",
+    "Seventh optimized subject line",
+    "Eighth optimized subject line",
+    "Ninth optimized subject line",
+    "Tenth optimized subject line"
+  ]
 }
 
-Subject line to rewrite:
-"${subject.replace(/"/g, '\\"')}"
+Subject lines to analyze:
+${subjectsList}
 
 MANDATORY REQUIREMENTS:
-- The "rewritten" array MUST contain EXACTLY 20 strings - no more, no less
-- Do NOT return an array of objects - return a SINGLE object
-- Each of the 20 alternatives must be a unique, optimized subject line
-- All 20 alternatives should be optimized for deliverability, engagement, and spam filter avoidance
-- Count your alternatives: you must provide exactly 20, not 19, not 21, but exactly 20`;
+- The "rewritten" array MUST contain EXACTLY 10 strings - no more, no less
+- Do NOT return an array of objects - return a SINGLE object with a "rewritten" array
+- Each of the 10 alternatives must be a unique, optimized subject line
+- All 10 alternatives should synthesize themes from the input subjects
+- All 10 alternatives should be optimized for deliverability, engagement, and spam filter avoidance
+- Count your alternatives: you must provide exactly 10, not 9, not 11, but exactly 10`;
 
-      // Call AI provider with retry logic
-      let result;
-      const maxRetries = 3;
-      let lastError: any = null;
-      const providerName = provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
+    // Call AI provider with retry logic
+    let result;
+    const maxRetries = 3;
+    let lastError: any = null;
+    const providerName = provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
 
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-          result = await generateTextWithProvider(
-            provider,
-            selectedModel,
-            apiKeyToUse!,
-            {
-              system: SYSTEM_PROMPT,
-              prompt: userPrompt,
-              temperature: 0.7,
-            }
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        result = await generateTextWithProvider(
+          provider,
+          selectedModel,
+          apiKeyToUse!,
+          {
+            system: SYSTEM_PROMPT,
+            prompt: userPrompt,
+            temperature: 0.7,
+          }
+        );
+        break;
+      } catch (error: any) {
+        lastError = error;
+        console.error(`${providerName} API error (attempt ${attempt + 1}/${maxRetries + 1}):`, error);
+        
+        if (error?.statusCode === 401 || error?.status === 401) {
+          return NextResponse.json(
+            { error: `Invalid ${providerName} API key. Please check your API key in Settings.` },
+            { status: 500 }
           );
-          break;
-        } catch (error: any) {
-          lastError = error;
-          console.error(`${providerName} API error for subject ${subjectNumber} (attempt ${attempt + 1}/${maxRetries + 1}):`, error);
-          
-          if (error?.statusCode === 401 || error?.status === 401) {
+        }
+        
+        // Handle overloaded model errors (should retry)
+        if (error?.message?.includes("overloaded") || error?.message?.toLowerCase().includes("model is overloaded")) {
+          if (attempt < maxRetries) {
+            // Longer backoff for overloaded: 2s, 4s, 8s
+            const delayMs = Math.pow(2, attempt + 1) * 1000;
+            console.log(`Model overloaded. Retrying in ${delayMs}ms...`);
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            continue;
+          } else {
             return NextResponse.json(
-              { error: `Invalid ${providerName} API key. Please check your API key in Settings.` },
+              { error: `The ${providerName} model is currently overloaded. Please try again in a few moments.` },
+              { status: 503 }
+            );
+          }
+        }
+
+        if (error?.statusCode === 429 || error?.status === 429 || error?.message?.includes("quota") || error?.message?.includes("billing")) {
+          if (attempt < maxRetries) {
+            const delayMs = Math.pow(2, attempt) * 1000;
+            console.log(`Rate limit/quota error. Retrying in ${delayMs}ms...`);
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            continue;
+          } else {
+            return NextResponse.json(
+              { error: `${providerName} API quota exceeded or rate limit reached. Please check your billing and try again later.` },
               { status: 500 }
             );
           }
-          
-          // Handle overloaded model errors (should retry)
-          if (error?.message?.includes("overloaded") || error?.message?.toLowerCase().includes("model is overloaded")) {
-            if (attempt < maxRetries) {
-              // Longer backoff for overloaded: 2s, 4s, 8s
-              const delayMs = Math.pow(2, attempt + 1) * 1000;
-              console.log(`Model overloaded. Retrying in ${delayMs}ms...`);
-              await new Promise((resolve) => setTimeout(resolve, delayMs));
-              continue;
-            } else {
-              return NextResponse.json(
-                { error: `The ${providerName} model is currently overloaded. Please try again in a few moments.` },
-                { status: 503 }
-              );
-            }
+        }
+        
+        if (error?.statusCode === 500 || error?.statusCode === 503 || error?.status === 500 || error?.status === 503) {
+          if (attempt < maxRetries) {
+            const delayMs = Math.pow(2, attempt) * 1000;
+            console.log(`Server error. Retrying in ${delayMs}ms...`);
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            continue;
+          } else {
+            return NextResponse.json(
+              { error: `${providerName} API is temporarily unavailable. Please try again later.` },
+              { status: 500 }
+            );
           }
-
-          if (error?.statusCode === 429 || error?.status === 429 || error?.message?.includes("quota") || error?.message?.includes("billing")) {
-            if (attempt < maxRetries) {
-              const delayMs = Math.pow(2, attempt) * 1000;
-              console.log(`Rate limit/quota error. Retrying in ${delayMs}ms...`);
-              await new Promise((resolve) => setTimeout(resolve, delayMs));
-              continue;
-            } else {
-              return NextResponse.json(
-                { error: `${providerName} API quota exceeded or rate limit reached. Please check your billing and try again later.` },
-                { status: 500 }
-              );
-            }
-          }
-          
-          if (error?.statusCode === 500 || error?.statusCode === 503 || error?.status === 500 || error?.status === 503) {
-            if (attempt < maxRetries) {
-              const delayMs = Math.pow(2, attempt) * 1000;
-              console.log(`Server error. Retrying in ${delayMs}ms...`);
-              await new Promise((resolve) => setTimeout(resolve, delayMs));
-              continue;
-            } else {
-              return NextResponse.json(
-                { error: `${providerName} API is temporarily unavailable. Please try again later.` },
-                { status: 500 }
-              );
-            }
-          }
-
-          const errorMessage = error?.message || `${providerName} API request failed`;
-          return NextResponse.json(
-            { error: `${providerName} API error: ${errorMessage}` },
-            { status: 500 }
-          );
         }
-      }
 
-      if (!result) {
-        if (lastError?.message?.includes("overloaded") || lastError?.message?.toLowerCase().includes("model is overloaded")) {
-          return NextResponse.json(
-            { error: `The ${providerName} model is currently overloaded. Please try again in a few moments.` },
-            { status: 503 }
-          );
-        }
-        if (lastError?.statusCode === 429 || lastError?.status === 429 || lastError?.message?.includes("quota")) {
-          return NextResponse.json(
-            { error: `${providerName} API quota exceeded or rate limit reached. Please try again in a few moments.` },
-            { status: 500 }
-          );
-        }
+        const errorMessage = error?.message || `${providerName} API request failed`;
         return NextResponse.json(
-          { error: `Failed to connect to ${providerName} API after multiple attempts. Please try again later.` },
+          { error: `${providerName} API error: ${errorMessage}` },
           { status: 500 }
         );
-      }
-
-      // Parse the AI response for this subject
-      let parsedResult;
-      try {
-        // Try to extract JSON from the response (in case there's extra text)
-        const text = result.text.trim();
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          parsedResult = JSON.parse(jsonMatch[0]);
-        } else {
-          parsedResult = JSON.parse(text);
-        }
-      } catch (parseError) {
-        console.error(`Failed to parse AI response for subject ${subjectNumber}:`, result.text);
-        return NextResponse.json(
-          { error: `Failed to parse AI response for subject ${subjectNumber}. The model may not have returned valid JSON.` },
-          { status: 500 }
-        );
-      }
-
-      // Validate the parsed result
-      if (!parsedResult || typeof parsedResult !== "object") {
-        return NextResponse.json(
-          { error: `Invalid response format for subject ${subjectNumber}. Expected an object.` },
-          { status: 500 }
-        );
-      }
-
-      // Ensure we have the required fields
-      if (!parsedResult.original || !Array.isArray(parsedResult.rewritten)) {
-        return NextResponse.json(
-          { error: `Invalid response structure for subject ${subjectNumber}. Missing 'original' or 'rewritten' fields.` },
-          { status: 500 }
-        );
-      }
-
-      // CRITICAL: Ensure we have exactly 20 alternatives
-      if (parsedResult.rewritten.length !== 20) {
-        console.error(`Subject ${subjectNumber} returned ${parsedResult.rewritten.length} alternatives, expected exactly 20`);
-        return NextResponse.json(
-          { 
-            error: `Failed to generate exactly 20 alternatives for subject ${subjectNumber}. Received ${parsedResult.rewritten.length} alternatives instead. Please try again.` 
-          },
-          { status: 500 }
-        );
-      }
-
-      // Validate that all alternatives are non-empty strings
-      const invalidAlternatives = parsedResult.rewritten.filter((alt: any) => typeof alt !== "string" || alt.trim().length === 0);
-      if (invalidAlternatives.length > 0) {
-        return NextResponse.json(
-          { 
-            error: `Invalid alternatives found for subject ${subjectNumber}. All 20 alternatives must be non-empty strings.` 
-          },
-          { status: 500 }
-        );
-      }
-
-      results.push(parsedResult);
-      
-      // Add a small delay between requests to avoid rate limiting
-      if (i < subjects.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
       }
     }
 
+    if (!result) {
+      if (lastError?.message?.includes("overloaded") || lastError?.message?.toLowerCase().includes("model is overloaded")) {
+        return NextResponse.json(
+          { error: `The ${providerName} model is currently overloaded. Please try again in a few moments.` },
+          { status: 503 }
+        );
+      }
+      if (lastError?.statusCode === 429 || lastError?.status === 429 || lastError?.message?.includes("quota")) {
+        return NextResponse.json(
+          { error: `${providerName} API quota exceeded or rate limit reached. Please try again in a few moments.` },
+          { status: 500 }
+        );
+      }
+      return NextResponse.json(
+        { error: `Failed to connect to ${providerName} API after multiple attempts. Please try again later.` },
+        { status: 500 }
+      );
+    }
+
+    // Parse the AI response
+    let parsedResult;
+    try {
+      // Try to extract JSON from the response (in case there's extra text)
+      const text = result.text.trim();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsedResult = JSON.parse(jsonMatch[0]);
+      } else {
+        parsedResult = JSON.parse(text);
+      }
+    } catch (parseError) {
+      console.error(`Failed to parse AI response:`, result.text);
+      return NextResponse.json(
+        { error: `Failed to parse AI response. The model may not have returned valid JSON.` },
+        { status: 500 }
+      );
+    }
+
+    // Validate the parsed result
+    if (!parsedResult || typeof parsedResult !== "object") {
+      return NextResponse.json(
+        { error: `Invalid response format. Expected an object.` },
+        { status: 500 }
+      );
+    }
+
+    // Ensure we have the required field
+    if (!Array.isArray(parsedResult.rewritten)) {
+      return NextResponse.json(
+        { error: `Invalid response structure. Missing 'rewritten' array field.` },
+        { status: 500 }
+      );
+    }
+
+    // CRITICAL: Ensure we have exactly 10 alternatives
+    if (parsedResult.rewritten.length !== 10) {
+      console.error(`Returned ${parsedResult.rewritten.length} alternatives, expected exactly 10`);
+      return NextResponse.json(
+        { 
+          error: `Failed to generate exactly 10 alternatives. Received ${parsedResult.rewritten.length} alternatives instead. Please try again.` 
+        },
+        { status: 500 }
+      );
+    }
+
+    // Validate that all alternatives are non-empty strings
+    const invalidAlternatives = parsedResult.rewritten.filter((alt: any) => typeof alt !== "string" || alt.trim().length === 0);
+    if (invalidAlternatives.length > 0) {
+      return NextResponse.json(
+        { 
+          error: `Invalid alternatives found. All 10 alternatives must be non-empty strings.` 
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
-      results: results,
+      rewritten: parsedResult.rewritten,
       rateLimit: {
         remaining: rateLimit.remaining,
         resetAt: rateLimit.resetAt,
