@@ -488,7 +488,7 @@ const EmailHeaderProcessor = () => {
             // Handle Date header based on replaceDateHeader setting
             if (replaceDateHeader) {
               // Replace with placeholder
-              outputLines.push("Date: [date*]")
+              outputLines.push("Date: [*date]")
               // Skip continuation lines if any
               while (
                 i + 1 < lines.length &&
@@ -1656,11 +1656,11 @@ const EmailHeaderProcessor = () => {
                     setReplaceDateHeader(e.target.checked)
                     setHasUnsavedChanges(true)
                   }}
-                  label="Replace Date header with [date*]"
+                  label="Replace Date header with [*date]"
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                When enabled, the original Date header will be replaced with "Date: [date*]". When disabled, the original Date header is kept.
+                When enabled, the original Date header will be replaced with "Date: [*date]". When disabled, the original Date header is kept.
               </p>
             </div>
 
