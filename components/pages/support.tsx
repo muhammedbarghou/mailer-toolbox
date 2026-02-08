@@ -115,7 +115,6 @@ const Support = () => {
     { value: "general", label: "General Inquiry", icon: HelpCircle },
     { value: "bug", label: "Bug Report", icon: Bug },
     { value: "feature", label: "Feature Request", icon: Sparkles },
-    { value: "billing", label: "Billing Question", icon: Mail },
     { value: "technical", label: "Technical Support", icon: MessageSquare },
   ]
 
@@ -176,12 +175,6 @@ const Support = () => {
                   <h4 className="text-sm font-medium">Tool Problems</h4>
                   <p className="text-xs text-muted-foreground">
                     Errors, unexpected behavior, feature questions
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <h4 className="text-sm font-medium">Billing</h4>
-                  <p className="text-xs text-muted-foreground">
-                    Subscription, payments, refunds
                   </p>
                 </div>
               </CardContent>
