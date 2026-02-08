@@ -10,6 +10,7 @@ import { toast } from "sonner"
 import { MessageSquare, Star, Sparkles, ThumbsUp, ThumbsDown } from "lucide-react"
 import emailjs from "@emailjs/browser"
 import { getCookie, setCookie, removeCookie, COOKIE_NAMES, SESSION_COOKIE_OPTIONS } from "@/lib/cookies"
+import { useAuth } from "@/contexts/AuthContext"
 
 interface FeedbackWidgetProps {
   trigger?: "auto" | "manual" | "post-action"
@@ -26,17 +27,39 @@ export function FeedbackWidget({
   delay = 30000, // 30 seconds
   context = {} 
 }: FeedbackWidgetProps) {
+  const { user, loading } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
   const [rating, setRating] = useState<number | null>(null)
   const [feedbackType, setFeedbackType] = useState<"general" | "feature" | "bug" | "improvement">("general")
   const [message, setMessage] = useState("")
   const [email, setEmail] = useState("")
+  const [name, setName] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [hasSubmitted, setHasSubmitted] = useState(false)
   const [dontShowAgain, setDontShowAgain] = useState(false)
 
+  // Auto-fill user info when user is available
+  useEffect(() => {
+    if (user && !loading) {
+      // Set email from user
+      setEmail(user.email || "")
+      
+      // Set name from user metadata (display_name, full_name, or fallback to email username)
+      const userName = 
+        user.user_metadata?.display_name || 
+        user.user_metadata?.full_name || 
+        (user.email ? user.email.split("@")[0] : "")
+      setName(userName)
+    }
+  }, [user, loading])
+
   // Check if user has already submitted feedback (localStorage) and session cookie
   useEffect(() => {
+    // Don't show if user is not authenticated
+    if (loading || !user) {
+      return
+    }
+
     // Check if user has selected "Don't show again" for this session
     const dontShowCookie = getCookie(COOKIE_NAMES.FEEDBACK_DONT_SHOW_AGAIN)
     if (dontShowCookie === "true" && trigger === "auto") {
@@ -56,7 +79,7 @@ export function FeedbackWidget({
       }, delay)
       return () => clearTimeout(timer)
     }
-  }, [trigger, delay])
+  }, [trigger, delay, user, loading])
 
   const handleRatingClick = (value: number) => {
     setRating(value)
@@ -72,7 +95,7 @@ export function FeedbackWidget({
     setIsSubmitting(true)
 
     const serviceId = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID
-    const templateId = process.env.NEXT_PUBLIC_EMAILJS_FEEDBACK_TEMPLATE_ID || process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID
+    const templateId = process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID
     const publicKey = process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY
 
     if (!serviceId || !templateId || !publicKey) {
@@ -86,6 +109,7 @@ export function FeedbackWidget({
         feedback_type: feedbackType,
         rating: rating?.toString() || "N/A",
         message: message || "No message provided",
+        name: name || "No name provided",
         email: email || "No email provided",
         page: context.page || (typeof window !== "undefined" ? window.location.pathname : ""),
         tool: context.tool || "N/A",
@@ -107,12 +131,12 @@ export function FeedbackWidget({
       // Close after 2 seconds
       setTimeout(() => {
         setIsOpen(false)
-        // Reset form
+        // Reset form (but keep user info)
         setRating(null)
         setMessage("")
-        setEmail("")
         setFeedbackType("general")
         setHasSubmitted(false)
+        // Email and name will be re-populated by useEffect when user is available
       }, 2000)
     } catch (error) {
       toast.error("Failed to send feedback. Please try again.")
@@ -120,6 +144,15 @@ export function FeedbackWidget({
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  // Don't render widget if user is not authenticated
+  if (loading) {
+    return null // Still loading auth state
+  }
+
+  if (!user) {
+    return null // User is not authenticated
   }
 
   if (hasSubmitted) {
@@ -244,19 +277,20 @@ export function FeedbackWidget({
               </p>
             </div>
 
-            {/* Optional Email */}
-            <div className="space-y-2">
-              <Label htmlFor="email">
-                Email <span className="text-muted-foreground">(optional - for follow-up)</span>
-              </Label>
-              <input
-                id="email"
-                type="email"
-                placeholder="your@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 rounded-md border bg-background text-sm"
-              />
+            {/* User Info Display (Read-only) */}
+            <div className="space-y-3 pt-2 pb-2 border-t border-b">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Name</Label>
+                <div className="px-3 py-2 rounded-md border bg-muted/50 text-sm text-muted-foreground">
+                  {name || "Not available"}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Email</Label>
+                <div className="px-3 py-2 rounded-md border bg-muted/50 text-sm text-muted-foreground">
+                  {email || "Not available"}
+                </div>
+              </div>
             </div>
 
             {/* Don't Show Again Option */}
