@@ -143,6 +143,9 @@ export const COOKIE_NAMES = {
   
   // Work session
   WORK_DRAFTS: 'work-drafts',
+  
+  // Feedback preferences
+  FEEDBACK_DONT_SHOW_AGAIN: 'feedback_dont_show_again',
 } as const
 
 /**

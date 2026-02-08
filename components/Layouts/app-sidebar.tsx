@@ -55,11 +55,6 @@ const toolCategories = [
         title: "Email Source Separator",
         icon: Layers,
       },
-      {
-        href: "/gmail-deliverability",
-        title: "Gmail Deliverability Viewer",
-        icon: Search,
-      },
     ],
   },
   {

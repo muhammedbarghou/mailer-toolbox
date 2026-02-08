@@ -5,9 +5,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { MessageSquare, Star, Sparkles, ThumbsUp, ThumbsDown } from "lucide-react"
 import emailjs from "@emailjs/browser"
+import { getCookie, setCookie, removeCookie, COOKIE_NAMES, SESSION_COOKIE_OPTIONS } from "@/lib/cookies"
 
 interface FeedbackWidgetProps {
   trigger?: "auto" | "manual" | "post-action"
@@ -31,9 +33,16 @@ export function FeedbackWidget({
   const [email, setEmail] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [hasSubmitted, setHasSubmitted] = useState(false)
+  const [dontShowAgain, setDontShowAgain] = useState(false)
 
-  // Check if user has already submitted feedback (localStorage)
+  // Check if user has already submitted feedback (localStorage) and session cookie
   useEffect(() => {
+    // Check if user has selected "Don't show again" for this session
+    const dontShowCookie = getCookie(COOKIE_NAMES.FEEDBACK_DONT_SHOW_AGAIN)
+    if (dontShowCookie === "true" && trigger === "auto") {
+      return // Don't show if user selected "Don't show again"
+    }
+
     const hasSubmittedToday = localStorage.getItem("feedback_submitted_date")
     const today = new Date().toDateString()
     
@@ -247,6 +256,32 @@ export function FeedbackWidget({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-3 py-2 rounded-md border bg-background text-sm"
+              />
+            </div>
+
+            {/* Don't Show Again Option */}
+            <div className="pt-2">
+              <Checkbox
+                id="dont-show-again"
+                checked={dontShowAgain}
+                onChange={(e) => {
+                  const checked = e.target.checked
+                  setDontShowAgain(checked)
+                  
+                  // Save or remove session cookie based on checkbox state
+                  if (typeof window !== "undefined") {
+                    if (checked) {
+                      setCookie(
+                        COOKIE_NAMES.FEEDBACK_DONT_SHOW_AGAIN,
+                        "true",
+                        SESSION_COOKIE_OPTIONS
+                      )
+                    } else {
+                      removeCookie(COOKIE_NAMES.FEEDBACK_DONT_SHOW_AGAIN)
+                    }
+                  }
+                }}
+                label="Don't show again this session"
               />
             </div>
 

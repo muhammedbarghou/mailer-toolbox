@@ -3,7 +3,6 @@ import type { Metadata } from "next"
 import Navbar from "@/components/Landing/nav-bar"
 import Footer from "@/components/Landing/footer"
 import Contact from "@/components/Landing/contact-us"
-import HeroSection from "@/components/Landing/HeroSection"
 
 export const metadata: Metadata = {
   title: "Mailer Toolkit - All-in-One Email & IP Tools Suite",
@@ -53,7 +52,6 @@ const page = () => {
     <div>
       <Navbar />
       <Home />  
-      <HeroSection />
       <Contact />
       <Footer />
     </div>
