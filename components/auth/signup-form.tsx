@@ -37,6 +37,31 @@ const SignupForm = () => {
     setLoading(true)
 
     try {
+      // Validate email with ZeroBounce before signup
+      const validationResponse = await fetch("/api/auth/validate-signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      })
+
+      const validationData = await validationResponse.json()
+
+      if (!validationData.allowed) {
+        // Show error message from validation
+        toast.error(validationData.reason || "Email validation failed")
+        
+        // If IP is blocked, show additional warning
+        if (validationResponse.status === 403) {
+          toast.error("Your IP address has been blocked. Please contact support if you believe this is an error.")
+        }
+        
+        setLoading(false)
+        return
+      }
+
+      // Email is valid, proceed with Supabase signup
       const displayName = `${name.trim()} ${lastName.trim()}`.trim()
       const { error } = await signUp(email, password, displayName)
       if (error) {
@@ -45,8 +70,9 @@ const SignupForm = () => {
         toast.success("Account created! Please check your email to verify your account.")
         router.push("/auth/login")
       }
-    } catch (error) {
-      toast.error("An unexpected error occurred")
+    } catch (error: any) {
+      console.error("Signup error:", error)
+      toast.error(error?.message || "An unexpected error occurred")
     } finally {
       setLoading(false)
     }
@@ -74,6 +100,9 @@ const SignupForm = () => {
           <h1 className="text-3xl font-bold">Create your account</h1>
             <p className="text-muted-foreground text-sm">
               Sign up to start using our tools.
+            </p>
+            <p className="text-muted-foreground text-sm">
+              We use ZeroBounce to validate your email address.Therefore, if your trying to sign up with a disposable email address, it will be rejected.
             </p>
         </div>
         <Field>

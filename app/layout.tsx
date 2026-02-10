@@ -106,7 +106,7 @@ export default function RootLayout({
   }
 
   return (
-    <html lang="en" className={`light ${ubuntu.variable}`} style={{ colorScheme: "light" }}>
+    <html lang="en" className={`light ${ubuntu.variable}`} style={{ colorScheme: "light" }} suppressHydrationWarning={true}>
       <head>
         <script
           type="application/ld+json"

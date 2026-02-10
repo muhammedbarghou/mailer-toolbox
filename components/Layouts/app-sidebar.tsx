@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { FileText, Inbox, Network, ImageIcon, Sparkles, PanelsRightBottom, Scissors, Layers, Home, Mail, Search, HelpCircle, ShieldAlert, SplitSquareHorizontal } from "lucide-react"
+import { FileText, Inbox, ImageIcon, Sparkles, PanelsRightBottom, Scissors, Layers, Home, Mail, HelpCircle, SplitSquareHorizontal } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -64,16 +64,6 @@ const toolCategories = [
         href: "/html-to-img",
         title: "HTML to Image Converter",
         icon: ImageIcon,
-      },
-      {
-        href: "/ip-comparator",
-        title: "IP Comparator",
-        icon: Network,
-      },
-      {
-        href: "/ip-reputation",
-        title: "IP Reputation Checker",
-        icon: ShieldAlert,
       },
       {
         href: "/photo-editor",

@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { User, LogOut, Settings, Home } from "lucide-react"
+import {  LogOut, Settings, Home } from "lucide-react"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import Image from "next/image"
@@ -37,7 +37,6 @@ export default function AuthenticatedNavbar() {
 
   const userName = user?.email?.split("@")[0] || "User"
 
-  // Get user avatar URL from metadata (OAuth providers like Google store it here)
   const userAvatarUrl = 
     user?.user_metadata?.avatar_url || 
     user?.user_metadata?.picture || 
