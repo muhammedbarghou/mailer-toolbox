@@ -17,6 +17,7 @@ import {  LogOut, Settings, Home } from "lucide-react"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import Image from "next/image"
+import {SearchForm} from "@/components/Layouts/search-form"
 
 
 export default function AuthenticatedNavbar() {
@@ -53,6 +54,7 @@ export default function AuthenticatedNavbar() {
             Mailer Toolkit
           </span>
         </Link>
+        <SearchForm />
 
         {/* Right side: User Menu + Theme Toggle */}
         <div className="flex items-center gap-3">

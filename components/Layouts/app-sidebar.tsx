@@ -78,7 +78,7 @@ export function AppSidebar() {
   const pathname = usePathname()
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-linear-to-b from-sidebar to-sidebar/95">
+    <Sidebar collapsible="offcanvas" className="border-r border-sidebar-border bg-linear-to-b from-sidebar to-sidebar/95">
       <SidebarContent className="gap-4">
         <SidebarGroup>
           <SidebarGroupContent>
