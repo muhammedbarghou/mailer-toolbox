@@ -10,15 +10,26 @@ export type AIModel =
   | "gemini-2.5-flash"
   | "gemini-2.5-flash-lite"
   // OpenAI models
-  | "gpt-5"
-  | "gpt-5.1"
+  | "gpt-5.2-pro"
+  | "gpt-5.2-chat-latest"
   | "gpt-5.2"
-  | "gpt-4o"
+  | "gpt-5"
+  | "gpt-5-mini"
+  | "gpt-5-nano"
+  | "gpt-5.1-chat-latest"
+  | "gpt-5.1-codex-mini"
+  | "gpt-5.1-codex"
+  | "gpt-5.1"
+  | "gpt-5-codex"
+  | "gpt-5-chat-latest"
   // Anthropic models
-  | "claude-sonnet-4.5"
-  | "claude-sonnet-4"
-  | "claude-opus-4.1"
-  | "claude-haiku-3.5";
+  | "claude-opus-4-6"
+  | "claude-opus-4-5"
+  | "claude-opus-4-1"
+  | "claude-opus-4-0"
+  | "claude-sonnet-4-0"
+  | "claude-3-7-sonnet-latest"
+  | "claude-3-5-haiku-latest";
 
 export interface GenerateTextOptions {
   system?: string;
@@ -93,13 +104,29 @@ export const getAvailableModels = (provider: ApiKeyProvider): AIModel[] => {
     case "gemini":
       return ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
     case "openai":
-      return ["gpt-5", "gpt-5.1", "gpt-5.2", "gpt-4o"];
+      return [
+        "gpt-5.2-pro",
+        "gpt-5.2-chat-latest",
+        "gpt-5.2",
+        "gpt-5",
+        "gpt-5-mini",
+        "gpt-5-nano",
+        "gpt-5.1-chat-latest",
+        "gpt-5.1-codex-mini",
+        "gpt-5.1-codex",
+        "gpt-5.1",
+        "gpt-5-codex",
+        "gpt-5-chat-latest",
+      ];
     case "anthropic":
       return [
-        "claude-sonnet-4.5",
-        "claude-sonnet-4",
-        "claude-opus-4.1",
-        "claude-haiku-3.5",
+        "claude-opus-4-6",
+        "claude-opus-4-5",
+        "claude-opus-4-1",
+        "claude-opus-4-0",
+        "claude-sonnet-4-0",
+        "claude-3-7-sonnet-latest",
+        "claude-3-5-haiku-latest",
       ];
     default:
       return [];
@@ -114,9 +141,9 @@ export const getDefaultModel = (provider: ApiKeyProvider): AIModel => {
     case "gemini":
       return "gemini-2.5-flash";
     case "openai":
-      return "gpt-4o";
+      return "gpt-5.2-pro";
     case "anthropic":
-      return "claude-sonnet-4.5";
+      return "claude-opus-4-6";
     default:
       throw new Error(`Unsupported provider: ${provider}`);
   }
@@ -130,14 +157,25 @@ export const getModelDisplayName = (model: AIModel): string => {
     "gemini-2.5-pro": "Gemini 2.5 Pro",
     "gemini-2.5-flash": "Gemini 2.5 Flash",
     "gemini-2.5-flash-lite": "Gemini 2.5 Flash Lite",
-    "gpt-5": "GPT-5",
-    "gpt-5.1": "GPT-5.1",
+    "gpt-5.2-pro": "GPT-5.2 Pro",
+    "gpt-5.2-chat-latest": "GPT-5.2 Chat Latest",
     "gpt-5.2": "GPT-5.2",
-    "gpt-4o": "GPT-4o",
-    "claude-sonnet-4.5": "Claude Sonnet 4.5",
-    "claude-sonnet-4": "Claude Sonnet 4",
-    "claude-opus-4.1": "Claude Opus 4.1",
-    "claude-haiku-3.5": "Claude Haiku 3.5",
+    "gpt-5": "GPT-5",
+    "gpt-5-mini": "GPT-5 Mini",
+    "gpt-5-nano": "GPT-5 Nano",
+    "gpt-5.1-chat-latest": "GPT-5.1 Chat Latest",
+    "gpt-5.1-codex-mini": "GPT-5.1 Codex Mini",
+    "gpt-5.1-codex": "GPT-5.1 Codex",
+    "gpt-5.1": "GPT-5.1",
+    "gpt-5-codex": "GPT-5 Codex",
+    "gpt-5-chat-latest": "GPT-5 Chat Latest",
+    "claude-opus-4-6": "Claude Opus 4.6",
+    "claude-opus-4-5": "Claude Opus 4.5",
+    "claude-opus-4-1": "Claude Opus 4.1",
+    "claude-opus-4-0": "Claude Opus 4.0",
+    "claude-sonnet-4-0": "Claude Sonnet 4.0",
+    "claude-3-7-sonnet-latest": "Claude 3.7 Sonnet Latest",
+    "claude-3-5-haiku-latest": "Claude 3.5 Haiku Latest",
   };
   return modelNames[model] || model;
 };

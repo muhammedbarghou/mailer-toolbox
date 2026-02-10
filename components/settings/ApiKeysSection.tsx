@@ -122,7 +122,7 @@ const ApiKeysSection = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        let errorMessage = data?.error || "Failed to create API key";
+        let errorMessage = data?.validation_error || data?.error || "Failed to create API key";
 
         if (response.status === 401) {
           errorMessage =
