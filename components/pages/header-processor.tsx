@@ -52,6 +52,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "sonner"
 import JSZip from "jszip"
 import { AppGuide } from "./app-guide"
+import { DialogSkeleton } from "@/components/skeletons"
 
 interface FileItem {
   id: string
@@ -1461,9 +1462,7 @@ const EmailHeaderProcessor = () => {
             <div className="space-y-2">
               <Label className="text-sm font-medium">Current Parameters</Label>
               {loadingParameters ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
+                <DialogSkeleton />
               ) : (
                 <div className="space-y-2">
                   {parameters.map((param) => (
@@ -1843,9 +1842,7 @@ const EmailHeaderProcessor = () => {
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Saved Profiles</Label>
                 {loadingProfiles ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
+                  <DialogSkeleton />
                 ) : (
                   <div className="space-y-2">
                     {profiles.map((profile) => (

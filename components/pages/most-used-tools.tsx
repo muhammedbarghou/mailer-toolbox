@@ -8,6 +8,7 @@ import { ArrowRight, TrendingUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getTopVisitedTools } from '@/lib/page-visit-tracker'
 import { tools } from '@/lib/tools-data'
+import { MostUsedToolsSkeleton } from "@/components/skeletons"
 
 // All tools are now in the shared tools-data file
 const allTools = tools
@@ -20,6 +21,7 @@ type ToolWithCount = {
 
 export const MostUsedTools = () => {
   const [topTools, setTopTools] = useState<ToolWithCount[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     // Get top 3 most visited tools
@@ -35,7 +37,13 @@ export const MostUsedTools = () => {
       .filter((item): item is ToolWithCount => item !== null)
 
     setTopTools(toolsWithData)
+    setLoading(false)
   }, [])
+
+  // Show skeleton while loading
+  if (loading) {
+    return <MostUsedToolsSkeleton />
+  }
 
   // Don't render if no tools have been visited
   if (topTools.length === 0) {

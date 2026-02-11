@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { PersonalPrivacySkeleton } from "@/components/skeletons";
 
 const PersonalPrivacySection = () => {
   const { user, updateProfile, updatePassword } = useAuth();
@@ -101,6 +102,10 @@ const PersonalPrivacySection = () => {
       setChangingPassword(false);
     }
   };
+
+  if (!user) {
+    return <PersonalPrivacySkeleton />;
+  }
 
   return (
     <Card>

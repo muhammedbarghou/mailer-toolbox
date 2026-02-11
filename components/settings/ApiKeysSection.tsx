@@ -21,6 +21,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import { ApiKeysSkeleton } from "@/components/skeletons";
 import {
   Select,
   SelectContent,
@@ -420,9 +421,7 @@ const ApiKeysSection = () => {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
+            <ApiKeysSkeleton />
           ) : apiKeys.length === 0 ? (
             <div className="space-y-2 py-12 text-center">
               <Key className="mx-auto h-12 w-12 text-muted-foreground/50" />

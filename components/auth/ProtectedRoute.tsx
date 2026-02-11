@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Lock } from "lucide-react"
+import { ProtectedRouteSkeleton } from "@/components/skeletons"
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -21,11 +22,7 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   }, [user, loading, router])
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    )
+    return <ProtectedRouteSkeleton />
   }
 
   if (!user) {
