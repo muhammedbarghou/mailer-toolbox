@@ -126,7 +126,7 @@ const IPv4Converter = () => {
     const invalidCount = converted.length - validCount
 
     if (invalidCount > 0) {
-      toast.success(`Converted ${validCount} IP${validCount !== 1 ? "s" : ""}, ${invalidCount} invalid`)
+      toast.warning(`Converted ${validCount} IP${validCount !== 1 ? "s" : ""}, ${invalidCount} invalid`)
     } else {
       toast.success(`Converted ${validCount} IP address${validCount !== 1 ? "es" : ""}`)
     }
@@ -161,17 +161,9 @@ const IPv4Converter = () => {
     [wrapBrackets, handleCopy]
   )
 
-  const getDisplayValue = useCallback(
-    (format: string, value: string): string => {
-      if (format === "ipv6Long" && wrapBrackets) {
-        return `[${value}]`
-      }
-      return value
-    },
-    [wrapBrackets]
-  )
-
-  const getCopyValue = useCallback(
+  // Shared formatter for both display and copy — split into separate
+  // functions if display vs. clipboard formatting ever needs to diverge.
+  const getFormattedValue = useCallback(
     (format: string, value: string): string => {
       if (format === "ipv6Long" && wrapBrackets) {
         return `[${value}]`
@@ -255,10 +247,10 @@ const IPv4Converter = () => {
                 checked={wrapBrackets}
                 onChange={(e) => setWrapBrackets(e.target.checked)}
                 className="w-4 h-4 rounded border-border text-primary focus:ring-ring accent-primary"
-                aria-label="Wrap results in square brackets"
+                aria-label="Wrap IPv6 (long) in square brackets"
               />
               <span className="text-sm text-foreground">
-                Wrap results in [ ]
+                Wrap IPv6 (long) in [ ]
               </span>
             </label>
 
@@ -328,8 +320,7 @@ const IPv4Converter = () => {
                   <div className="space-y-1">
                     {formats.map((format) => {
                       const rawValue = result[format.key] as string
-                      const displayValue = getDisplayValue(format.key, rawValue)
-                      const copyValue = getCopyValue(format.key, rawValue)
+                      const formattedValue = getFormattedValue(format.key, rawValue)
                       const copyKey = `${index}-${format.key}`
 
                       return (
@@ -347,10 +338,10 @@ const IPv4Converter = () => {
                             className="flex-1 text-sm text-foreground break-all"
                             style={{ fontFamily: "'IBM Plex Mono', monospace" }}
                           >
-                            {displayValue}
+                            {formattedValue}
                           </span>
                           <button
-                            onClick={() => handleCopy(copyValue, copyKey)}
+                            onClick={() => handleCopy(formattedValue, copyKey)}
                             className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 hover:bg-muted transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
                             aria-label={`Copy ${format.label} value for ${result.original}`}
                             tabIndex={0}
