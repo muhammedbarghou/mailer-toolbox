@@ -16,6 +16,7 @@ import {
   Search,
   ShieldAlert,
   SplitSquareHorizontal,
+  ArrowRightLeft,
 } from "lucide-react"
 
 export const tools = [
@@ -126,6 +127,15 @@ export const tools = [
     color: "from-slate-500/10 to-gray-500/10",
     iconColor: "text-slate-500",
     borderColor: "border-slate-500/20",
+  },
+  {
+    href: "/ipv4-converter",
+    title: "IPv4 Converter",
+    description: "Convert IPv4 addresses to Integer, Hex, IPv6 (short and long) formats. Supports batch conversion of multiple IPs.",
+    icon: ArrowRightLeft,
+    color: "from-emerald-500/10 to-teal-500/10",
+    iconColor: "text-emerald-500",
+    borderColor: "border-emerald-500/20",
   },
 ] as const
 
