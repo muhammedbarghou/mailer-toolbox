@@ -75,6 +75,11 @@ const toolCategories = [
         title: "IPv4 Converter",
         icon: ArrowRightLeft,
       },
+      {
+        href: "/mbox-to-eml",
+        title: "Mbox Converter",
+        icon: ArrowRightLeft,
+      },
     ],
   },
 ]
