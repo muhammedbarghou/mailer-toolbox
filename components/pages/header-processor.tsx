@@ -48,11 +48,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "sonner"
 import JSZip from "jszip"
 import { AppGuide } from "./app-guide"
-import { DialogSkeleton } from "@/components/skeletons"
 
 interface FileItem {
   id: string
@@ -101,8 +99,47 @@ const DEFAULT_PARAMETERS: HeaderParameter[] = [
 
 const MAX_INDIVIDUAL_DOWNLOADS = 20
 
+const STORAGE_KEYS = {
+  parameters: "mailer-toolbox:header-parameters",
+  profiles: "mailer-toolbox:header-profiles",
+} as const
+
+type ProcessingConfig = {
+  removeXHeaders: boolean
+  addListUnsubscribe: boolean
+  replaceDateHeader: boolean
+}
+
+type StoredProfile = {
+  id: string
+  name: string
+  description: string | null
+  is_default: boolean
+  parameters: HeaderParameter[]
+  customHeaders: string[]
+  processingConfig: ProcessingConfig
+}
+
+const readStorage = <T,>(key: string, fallback: T): T => {
+  if (typeof window === "undefined") return fallback
+  try {
+    const raw = window.localStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as T) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+const writeStorage = (key: string, value: unknown) => {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    /* ignore quota / serialization errors */
+  }
+}
+
 const EmailHeaderProcessor = () => {
-  const { user } = useAuth()
   const [files, setFiles] = useState<FileItem[]>([])
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
@@ -116,7 +153,6 @@ const EmailHeaderProcessor = () => {
   const [newParameterName, setNewParameterName] = useState("")
   const [newParameterPlaceholder, setNewParameterPlaceholder] = useState("")
   const [newParameterDescription, setNewParameterDescription] = useState("")
-  const [loadingParameters, setLoadingParameters] = useState(false)
   const [savingParameters, setSavingParameters] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
@@ -141,9 +177,8 @@ const EmailHeaderProcessor = () => {
   const [replaceDateHeader, setReplaceDateHeader] = useState<boolean>(false)
 
   // Profile state
-  const [profiles, setProfiles] = useState<Array<{ id: string; name: string; description: string | null; is_default: boolean }>>([])
+  const [profiles, setProfiles] = useState<StoredProfile[]>([])
   const [currentProfileId, setCurrentProfileId] = useState<string | null>(null)
-  const [loadingProfiles, setLoadingProfiles] = useState(false)
   const [showProfilesDialog, setShowProfilesDialog] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
   const [newProfileName, setNewProfileName] = useState("")
@@ -156,160 +191,59 @@ const EmailHeaderProcessor = () => {
     return files.find((f) => f.id === selectedFileId)
   }, [files, selectedFileId])
 
-  // Load parameters from user profile
+  // Load parameters from browser storage
   useEffect(() => {
-    const loadParameters = async () => {
-      if (!user) {
-        setParameters(DEFAULT_PARAMETERS)
-        return
-      }
-
-      setLoadingParameters(true)
-      try {
-        const response = await fetch("/api/header-parameters")
-        if (response.ok) {
-          const data = await response.json()
-          if (data.parameters && data.parameters.length > 0) {
-            setParameters(
-              data.parameters.map((p: HeaderParameter) => ({
-                id: p.id,
-                name: p.name,
-                placeholder: p.placeholder,
-                description: p.description,
-              }))
-            )
-          } else {
-            setParameters(DEFAULT_PARAMETERS)
-          }
-        } else if (response.status === 401) {
-          // Not authenticated, use defaults
-          setParameters(DEFAULT_PARAMETERS)
-        }
-      } catch (error) {
-        console.error("Failed to load parameters:", error)
-        setParameters(DEFAULT_PARAMETERS)
-      } finally {
-        setLoadingParameters(false)
-      }
-    }
-
-    loadParameters()
-  }, [user])
+    const storedParameters = readStorage<HeaderParameter[]>(STORAGE_KEYS.parameters, [])
+    setParameters(storedParameters.length > 0 ? storedParameters : DEFAULT_PARAMETERS)
+  }, [])
 
   // Profile management handlers
-  const handleApplyProfile = useCallback(async (profileId: string) => {
-    if (!user) {
-      toast.error("Please sign in to use profiles")
+  const handleApplyProfile = useCallback((profileId: string) => {
+    const profile = readStorage<StoredProfile[]>(STORAGE_KEYS.profiles, []).find(
+      (p) => p.id === profileId
+    )
+
+    if (!profile) {
+      toast.error("Profile not found")
       return
     }
 
-    try {
-      const response = await fetch(`/api/header-profiles/${profileId}/apply`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-      
-      // Check if response has content before parsing JSON
-      const contentType = response.headers.get("content-type")
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await response.text()
-        console.error("Non-JSON response:", text)
-        toast.error(`Failed to apply profile: ${response.status} ${response.statusText}`)
-        return
-      }
+    const profileParams =
+      profile.parameters && profile.parameters.length > 0
+        ? profile.parameters
+        : DEFAULT_PARAMETERS
 
-      let data
-      try {
-        const text = await response.text()
-        if (!text || text.trim().length === 0) {
-          console.error("Empty response from server")
-          toast.error("Failed to apply profile: Empty response from server")
-          return
-        }
-        data = JSON.parse(text)
-      } catch (parseError) {
-        console.error("Failed to parse JSON response:", parseError)
-        toast.error("Failed to apply profile: Invalid response from server")
-        return
-      }
-      
-      if (response.ok && data.config) {
-        // Use default parameters if profile has none, otherwise use profile parameters
-        const profileParams = data.config.parameters && data.config.parameters.length > 0
-          ? data.config.parameters
-          : DEFAULT_PARAMETERS
-        
-        setParameters(profileParams)
-        setCustomHeaders(data.config.customHeaders || [])
-        // Load X-header removal setting from processing config (default to true if not set)
-        setRemoveXHeaders(
-          data.config.processingConfig?.removeXHeaders !== undefined
-            ? (data.config.processingConfig.removeXHeaders as boolean)
-            : true
-        )
-        // Load List-Unsubscribe setting from processing config (default to true if not set)
-        setAddListUnsubscribe(
-          data.config.processingConfig?.addListUnsubscribe !== undefined
-            ? (data.config.processingConfig.addListUnsubscribe as boolean)
-            : true
-        )
-        // Load Date header replacement setting from processing config (default to false if not set)
-        setReplaceDateHeader(
-          data.config.processingConfig?.replaceDateHeader !== undefined
-            ? (data.config.processingConfig.replaceDateHeader as boolean)
-            : false
-        )
-        setCurrentProfileId(profileId)
-        setHasUnsavedChanges(false)
-        toast.success("Profile applied successfully")
-      } else {
-        const errorMessage = data?.error || `Failed to apply profile: ${response.status} ${response.statusText}`
-        console.error("Failed to apply profile:", errorMessage)
-        toast.error(errorMessage)
-      }
-    } catch (error) {
-      console.error("Failed to apply profile:", error)
-      const errorMessage = error instanceof Error ? error.message : "Failed to apply profile"
-      toast.error(errorMessage)
-    }
-  }, [user])
+    setParameters(profileParams)
+    setCustomHeaders(profile.customHeaders || [])
+    setRemoveXHeaders(
+      profile.processingConfig?.removeXHeaders !== undefined
+        ? profile.processingConfig.removeXHeaders
+        : true
+    )
+    setAddListUnsubscribe(
+      profile.processingConfig?.addListUnsubscribe !== undefined
+        ? profile.processingConfig.addListUnsubscribe
+        : true
+    )
+    setReplaceDateHeader(
+      profile.processingConfig?.replaceDateHeader !== undefined
+        ? profile.processingConfig.replaceDateHeader
+        : false
+    )
+    setCurrentProfileId(profileId)
+    setHasUnsavedChanges(false)
+    toast.success("Profile applied successfully")
+  }, [])
 
-  // Load profiles from user profile
+  // Load profiles from browser storage
   useEffect(() => {
-    const loadProfiles = async () => {
-      if (!user) {
-        setProfiles([])
-        return
-      }
-
-      setLoadingProfiles(true)
-      try {
-        const response = await fetch("/api/header-profiles")
-        if (response.ok) {
-          const data = await response.json()
-          if (data.profiles && data.profiles.length > 0) {
-            setProfiles(data.profiles)
-            // Load default profile if exists
-            const defaultProfile = data.profiles.find((p: { is_default: boolean }) => p.is_default)
-            if (defaultProfile) {
-              handleApplyProfile(defaultProfile.id)
-            }
-          }
-        } else if (response.status === 401) {
-          setProfiles([])
-        }
-      } catch (error) {
-        console.error("Failed to load profiles:", error)
-        setProfiles([])
-      } finally {
-        setLoadingProfiles(false)
-      }
+    const storedProfiles = readStorage<StoredProfile[]>(STORAGE_KEYS.profiles, [])
+    setProfiles(storedProfiles)
+    const defaultProfile = storedProfiles.find((p) => p.is_default)
+    if (defaultProfile) {
+      handleApplyProfile(defaultProfile.id)
     }
-
-    loadProfiles()
-  }, [user, handleApplyProfile])
+  }, [handleApplyProfile])
 
   // Process email with custom parameters
   const processEmail = useCallback(
@@ -524,15 +458,6 @@ const EmailHeaderProcessor = () => {
         }
       }
 
-      // Find insertion point after From: header
-      const fromIndex = outputLines.findIndex((line) => line.startsWith("From:"))
-      const insertIndex =
-        fromIndex !== -1
-          ? fromIndex + 1
-          : outputLines.findIndex((line) => line === "") !== -1
-            ? outputLines.findIndex((line) => line === "")
-            : outputLines.length
-
       // Add List-Unsubscribe headers if enabled
       const headersToInsert: string[] = []
       if (addListUnsubscribe) {
@@ -560,14 +485,45 @@ const EmailHeaderProcessor = () => {
         return processedHeader
       })
 
+      // Header field names introduced by custom headers (used to replace originals)
+      const customHeaderNames = new Set(
+        processedCustomHeaders
+          .map((h) => h.split(":")[0]?.trim().toLowerCase())
+          .filter((n): n is string => Boolean(n))
+      )
+
+      // Remove any original header that a custom header will replace
+      const headerEnd = outputLines.indexOf("")
+      const limit = headerEnd === -1 ? outputLines.length : headerEnd
+      const deduped: string[] = []
+      for (let i = 0; i < outputLines.length; i++) {
+        const line = outputLines[i]
+        const name = i < limit ? line.split(":")[0]?.trim().toLowerCase() : ""
+        if (name && customHeaderNames.has(name)) {
+          // Skip folded continuation lines belonging to the replaced header
+          while (i + 1 < limit && /^[\t ]/.test(outputLines[i + 1])) i++
+          continue
+        }
+        deduped.push(line)
+      }
+
+      // Find insertion point after From: header
+      const fromIndex = deduped.findIndex((line) => line.startsWith("From:"))
+      const insertIndex =
+        fromIndex !== -1
+          ? fromIndex + 1
+          : deduped.findIndex((line) => line === "") !== -1
+            ? deduped.findIndex((line) => line === "")
+            : deduped.length
+
       // Combine standard headers and custom headers
       const allHeadersToInsert = [...headersToInsert, ...processedCustomHeaders]
 
       if (insertIndex !== -1) {
-        outputLines.splice(insertIndex, 0, ...allHeadersToInsert)
+        deduped.splice(insertIndex, 0, ...allHeadersToInsert)
       }
 
-      return outputLines.join("\n")
+      return deduped.join("\n")
     },
     [parameters, customHeaders, removeXHeaders, addListUnsubscribe, replaceDateHeader]
   )
@@ -824,48 +780,22 @@ const EmailHeaderProcessor = () => {
     toast.success("Parameter removed")
   }, [])
 
-  const handleSaveParameters = useCallback(async () => {
-    if (!user) {
-      toast.error("Please sign in to save parameters to your profile")
-      return
-    }
-
+  const handleSaveParameters = useCallback(() => {
     setSavingParameters(true)
-
     try {
-      // First, delete all existing parameters
-      const existingResponse = await fetch("/api/header-parameters")
-      if (existingResponse.ok) {
-        const existingData = await existingResponse.json()
-        for (const param of existingData.parameters || []) {
-          await fetch(`/api/header-parameters/${param.id}`, {
-            method: "DELETE",
-          })
-        }
-      }
-
-      // Then, create all current parameters
-      for (const param of parameters) {
-        await fetch("/api/header-parameters", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: param.name,
-            placeholder: param.placeholder,
-            description: param.description,
-          }),
-        })
-      }
-
+      const cleanedParameters = parameters.map((p) => ({
+        id: p.id,
+        name: p.name,
+        placeholder: p.placeholder,
+        description: p.description,
+      }))
+      writeStorage(STORAGE_KEYS.parameters, cleanedParameters)
       setHasUnsavedChanges(false)
-      toast.success("Parameters saved to your profile!")
-    } catch (error) {
-      console.error("Failed to save parameters:", error)
-      toast.error("Failed to save parameters. Please try again.")
+      toast.success("Parameters saved in this browser!")
     } finally {
       setSavingParameters(false)
     }
-  }, [user, parameters])
+  }, [parameters])
 
   const handleResetToDefaults = useCallback(() => {
     setParameters(DEFAULT_PARAMETERS)
@@ -877,12 +807,7 @@ const EmailHeaderProcessor = () => {
     toast.success("Reset to default parameters")
   }, [])
 
-  const handleSaveAsProfile = useCallback(async () => {
-    if (!user) {
-      toast.error("Please sign in to save profiles")
-      return
-    }
-
+  const handleSaveAsProfile = useCallback(() => {
     if (!newProfileName.trim()) {
       toast.error("Please enter a profile name")
       return
@@ -890,69 +815,53 @@ const EmailHeaderProcessor = () => {
 
     setSavingProfile(true)
     try {
-      const parameterIds = parameters.map((p) => p.id).filter((id) => !id.startsWith("default-") && !id.startsWith("new-"))
-      
-      const response = await fetch("/api/header-profiles", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newProfileName.trim(),
-          description: newProfileDescription.trim() || null,
-          custom_headers: customHeaders,
-          processing_config: {
-            removeXHeaders: removeXHeaders,
-            addListUnsubscribe: addListUnsubscribe,
-            replaceDateHeader: replaceDateHeader,
-          },
-          parameter_ids: parameterIds,
-          is_default: false,
-        }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setProfiles((prev) => [...prev, data.profile])
-        setNewProfileName("")
-        setNewProfileDescription("")
-        setShowProfilesDialog(false)
-        setHasUnsavedChanges(false)
-        toast.success("Profile saved successfully!")
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || "Failed to save profile")
+      const newProfile: StoredProfile = {
+        id: `profile-${Date.now()}`,
+        name: newProfileName.trim(),
+        description: newProfileDescription.trim() || null,
+        is_default: false,
+        parameters: parameters.map((p) => ({
+          id: p.id,
+          name: p.name,
+          placeholder: p.placeholder,
+          description: p.description,
+        })),
+        customHeaders,
+        processingConfig: {
+          removeXHeaders,
+          addListUnsubscribe,
+          replaceDateHeader,
+        },
       }
-    } catch (error) {
-      console.error("Failed to save profile:", error)
-      toast.error("Failed to save profile. Please try again.")
+
+      setProfiles((prev) => {
+        const updated = [...prev, newProfile]
+        writeStorage(STORAGE_KEYS.profiles, updated)
+        return updated
+      })
+      setNewProfileName("")
+      setNewProfileDescription("")
+      setShowProfilesDialog(false)
+      setHasUnsavedChanges(false)
+      toast.success("Profile saved successfully!")
     } finally {
       setSavingProfile(false)
     }
-  }, [user, parameters, customHeaders, removeXHeaders, addListUnsubscribe, replaceDateHeader, newProfileName, newProfileDescription])
+  }, [parameters, customHeaders, removeXHeaders, addListUnsubscribe, replaceDateHeader, newProfileName, newProfileDescription])
 
-  const handleDeleteProfile = useCallback(async (profileId: string) => {
-    if (!user) return
-
-    try {
-      const response = await fetch(`/api/header-profiles/${profileId}`, {
-        method: "DELETE",
-      })
-
-      if (response.ok) {
-        setProfiles((prev) => prev.filter((p) => p.id !== profileId))
-        if (currentProfileId === profileId) {
-          setCurrentProfileId(null)
-          setParameters(DEFAULT_PARAMETERS)
-          setCustomHeaders([])
-        }
-        toast.success("Profile deleted successfully")
-      } else {
-        toast.error("Failed to delete profile")
-      }
-    } catch (error) {
-      console.error("Failed to delete profile:", error)
-      toast.error("Failed to delete profile")
+  const handleDeleteProfile = useCallback((profileId: string) => {
+    setProfiles((prev) => {
+      const updated = prev.filter((p) => p.id !== profileId)
+      writeStorage(STORAGE_KEYS.profiles, updated)
+      return updated
+    })
+    if (currentProfileId === profileId) {
+      setCurrentProfileId(null)
+      setParameters(DEFAULT_PARAMETERS)
+      setCustomHeaders([])
     }
-  }, [user, currentProfileId])
+    toast.success("Profile deleted successfully")
+  }, [currentProfileId])
 
   const stats = useMemo(() => {
     const total = files.length
@@ -985,7 +894,7 @@ const EmailHeaderProcessor = () => {
             </div>
           </div>
           <div className="flex gap-2">
-            {user && profiles.length > 0 && (
+            {profiles.length > 0 && (
               <Select
                 value={currentProfileId || "none"}
                 onValueChange={(value) => {
@@ -1028,17 +937,15 @@ const EmailHeaderProcessor = () => {
                 <span className="h-2 w-2 rounded-full bg-amber-500" />
               )}
             </Button>
-            {user && (
-              <Button
-                variant="outline"
-                onClick={() => setShowProfilesDialog(true)}
-                className="gap-2"
-                aria-label="Manage profiles"
-              >
-                <BookmarkCheck size={16} />
-                <span className="hidden sm:inline">Profiles</span>
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              onClick={() => setShowProfilesDialog(true)}
+              className="gap-2"
+              aria-label="Manage profiles"
+            >
+              <BookmarkCheck size={16} />
+              <span className="hidden sm:inline">Profiles</span>
+            </Button>
             <Button
               variant="outline"
               onClick={() => setShowGuideDialog(true)}
@@ -1451,9 +1358,7 @@ const EmailHeaderProcessor = () => {
             </DialogTitle>
             <DialogDescription>
               Configure custom placeholders used when processing email headers.
-              {user
-                ? " Parameters will be saved to your profile."
-                : " Sign in to save parameters to your profile."}
+              {" Parameters will be saved in this browser."}
             </DialogDescription>
           </DialogHeader>
 
@@ -1461,10 +1366,7 @@ const EmailHeaderProcessor = () => {
             {/* Existing Parameters */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">Current Parameters</Label>
-              {loadingParameters ? (
-                <DialogSkeleton />
-              ) : (
-                <div className="space-y-2">
+              <div className="space-y-2">
                   {parameters.map((param) => (
                     <div
                       key={param.id}
@@ -1571,8 +1473,7 @@ const EmailHeaderProcessor = () => {
                       No parameters defined. Add one below or reset to defaults.
                     </div>
                   )}
-                </div>
-              )}
+              </div>
             </div>
 
             {/* Add New Parameter */}
@@ -1799,25 +1700,23 @@ const EmailHeaderProcessor = () => {
               Reset to Defaults
             </Button>
             <div className="flex-1" />
-            {user && (
-              <Button
-                onClick={handleSaveParameters}
-                disabled={savingParameters || !hasUnsavedChanges}
-                className="gap-2"
-              >
-                {savingParameters ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save size={14} />
-                    Save to Profile
-                  </>
-                )}
-              </Button>
-            )}
+            <Button
+              onClick={handleSaveParameters}
+              disabled={savingParameters || !hasUnsavedChanges}
+              className="gap-2"
+            >
+              {savingParameters ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save size={14} />
+                  Save Parameters
+                </>
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1832,18 +1731,14 @@ const EmailHeaderProcessor = () => {
             </DialogTitle>
             <DialogDescription>
               Save and manage different header processing configurations as profiles.
-              {!user && " Sign in to create and manage profiles."}
+              {" Profiles are saved in this browser."}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             {/* Existing Profiles */}
-            {user && (
-              <div className="space-y-2">
+            <div className="space-y-2">
                 <Label className="text-sm font-medium">Saved Profiles</Label>
-                {loadingProfiles ? (
-                  <DialogSkeleton />
-                ) : (
                   <div className="space-y-2">
                     {profiles.map((profile) => (
                       <div
@@ -1896,13 +1791,10 @@ const EmailHeaderProcessor = () => {
                       </div>
                     )}
                   </div>
-                )}
               </div>
-            )}
 
             {/* Save Current Configuration as Profile */}
-            {user && (
-              <div className="space-y-2 border-t pt-4">
+            <div className="space-y-2 border-t pt-4">
                 <Label className="text-sm font-medium">Save Current Configuration as Profile</Label>
                 <Input
                   placeholder="Profile name"
@@ -1936,13 +1828,6 @@ const EmailHeaderProcessor = () => {
                   )}
                 </Button>
               </div>
-            )}
-
-            {!user && (
-              <div className="text-center py-4 text-muted-foreground text-sm">
-                Please sign in to create and manage profiles.
-              </div>
-            )}
           </div>
 
           <DialogFooter>
