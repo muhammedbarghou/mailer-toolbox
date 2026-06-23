@@ -101,6 +101,7 @@ const MAX_INDIVIDUAL_DOWNLOADS = 20
 
 const STORAGE_KEYS = {
   parameters: "mailer-toolbox:header-parameters",
+  settings: "mailer-toolbox:header-settings",
   profiles: "mailer-toolbox:header-profiles",
 } as const
 
@@ -108,6 +109,20 @@ type ProcessingConfig = {
   removeXHeaders: boolean
   addListUnsubscribe: boolean
   replaceDateHeader: boolean
+}
+
+type StoredSettings = {
+  customHeaders: string[]
+  processingConfig: ProcessingConfig
+}
+
+const DEFAULT_SETTINGS: StoredSettings = {
+  customHeaders: [],
+  processingConfig: {
+    removeXHeaders: true,
+    addListUnsubscribe: true,
+    replaceDateHeader: false,
+  },
 }
 
 type StoredProfile = {
@@ -191,12 +206,6 @@ const EmailHeaderProcessor = () => {
     return files.find((f) => f.id === selectedFileId)
   }, [files, selectedFileId])
 
-  // Load parameters from browser storage
-  useEffect(() => {
-    const storedParameters = readStorage<HeaderParameter[]>(STORAGE_KEYS.parameters, [])
-    setParameters(storedParameters.length > 0 ? storedParameters : DEFAULT_PARAMETERS)
-  }, [])
-
   // Profile management handlers
   const handleApplyProfile = useCallback((profileId: string) => {
     const profile = readStorage<StoredProfile[]>(STORAGE_KEYS.profiles, []).find(
@@ -235,13 +244,35 @@ const EmailHeaderProcessor = () => {
     toast.success("Profile applied successfully")
   }, [])
 
-  // Load profiles from browser storage
+  // Load saved configuration from browser storage
   useEffect(() => {
     const storedProfiles = readStorage<StoredProfile[]>(STORAGE_KEYS.profiles, [])
     setProfiles(storedProfiles)
+
     const defaultProfile = storedProfiles.find((p) => p.is_default)
     if (defaultProfile) {
       handleApplyProfile(defaultProfile.id)
+      return
+    }
+
+    const storedParameters = readStorage<HeaderParameter[]>(STORAGE_KEYS.parameters, [])
+    setParameters(storedParameters.length > 0 ? storedParameters : DEFAULT_PARAMETERS)
+
+    const storedSettings = readStorage<StoredSettings | null>(STORAGE_KEYS.settings, null)
+    if (storedSettings) {
+      setCustomHeaders(storedSettings.customHeaders ?? DEFAULT_SETTINGS.customHeaders)
+      setRemoveXHeaders(
+        storedSettings.processingConfig?.removeXHeaders ??
+          DEFAULT_SETTINGS.processingConfig.removeXHeaders
+      )
+      setAddListUnsubscribe(
+        storedSettings.processingConfig?.addListUnsubscribe ??
+          DEFAULT_SETTINGS.processingConfig.addListUnsubscribe
+      )
+      setReplaceDateHeader(
+        storedSettings.processingConfig?.replaceDateHeader ??
+          DEFAULT_SETTINGS.processingConfig.replaceDateHeader
+      )
     }
   }, [handleApplyProfile])
 
@@ -790,12 +821,20 @@ const EmailHeaderProcessor = () => {
         description: p.description,
       }))
       writeStorage(STORAGE_KEYS.parameters, cleanedParameters)
+      writeStorage(STORAGE_KEYS.settings, {
+        customHeaders,
+        processingConfig: {
+          removeXHeaders,
+          addListUnsubscribe,
+          replaceDateHeader,
+        },
+      })
       setHasUnsavedChanges(false)
-      toast.success("Parameters saved in this browser!")
+      toast.success("Configuration saved in this browser!")
     } finally {
       setSavingParameters(false)
     }
-  }, [parameters])
+  }, [parameters, customHeaders, removeXHeaders, addListUnsubscribe, replaceDateHeader])
 
   const handleResetToDefaults = useCallback(() => {
     setParameters(DEFAULT_PARAMETERS)
@@ -1358,7 +1397,7 @@ const EmailHeaderProcessor = () => {
             </DialogTitle>
             <DialogDescription>
               Configure custom placeholders used when processing email headers.
-              {" Parameters will be saved in this browser."}
+              {" All settings in this dialog will be saved in this browser."}
             </DialogDescription>
           </DialogHeader>
 
