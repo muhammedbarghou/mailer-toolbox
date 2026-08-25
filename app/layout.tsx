@@ -83,6 +83,13 @@ export const metadata: Metadata = {
   },
 }
 
+/**
+ * Serialise structured data for an inline <script>. Escaping `<` prevents a
+ * value from ever closing the tag early and turning into markup.
+ */
+const toJsonLd = (data: Record<string, unknown>): string =>
+  JSON.stringify(data).replace(/</g, "\\u003c")
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -110,11 +117,11 @@ export default function RootLayout({
       <head>
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+          dangerouslySetInnerHTML={{ __html: toJsonLd(structuredData) }}
         />
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteStructuredData) }}
+          dangerouslySetInnerHTML={{ __html: toJsonLd(websiteStructuredData) }}
         />
       </head>
       <body suppressHydrationWarning className={`m-0 p-0 overflow-x-hidden light ${ubuntu.variable}`}>

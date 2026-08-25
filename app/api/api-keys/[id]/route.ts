@@ -114,7 +114,7 @@ export async function PUT(
   } catch (error: any) {
     console.error("Error updating API key:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to update API key" },
+      { error: "Failed to update API key" },
       { status: 500 }
     );
   }
@@ -161,7 +161,7 @@ export async function DELETE(
   } catch (error: any) {
     console.error("Error deleting API key:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to delete API key" },
+      { error: "Failed to delete API key" },
       { status: 500 }
     );
   }

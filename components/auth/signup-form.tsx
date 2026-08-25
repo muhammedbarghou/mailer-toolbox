@@ -37,33 +37,10 @@ const SignupForm = () => {
     setLoading(true)
 
     try {
-      // Validate email with ZeroBounce before signup
-      const validationResponse = await fetch("/api/auth/validate-signup", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email }),
-      })
-
-      const validationData = await validationResponse.json()
-
-      if (!validationData.allowed) {
-        // Show error message from validation
-        toast.error(validationData.reason || "Email validation failed")
-        
-        // If IP is blocked, show additional warning
-        if (validationResponse.status === 403) {
-          toast.error("Your IP address has been blocked. Please contact support if you believe this is an error.")
-        }
-        
-        setLoading(false)
-        return
-      }
-
-      // Email is valid, proceed with Supabase signup
+      // Email validation and IP blocking are enforced by the signup route
       const displayName = `${name.trim()} ${lastName.trim()}`.trim()
       const { error } = await signUp(email, password, displayName)
+
       if (error) {
         toast.error(error.message || "Failed to sign up")
       } else {

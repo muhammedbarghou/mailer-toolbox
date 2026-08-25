@@ -10,7 +10,6 @@ interface AuthContextType {
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error: any }>
   signUp: (email: string, password: string, displayName?: string) => Promise<{ error: any }>
-  signUpWithValidation: (email: string, password: string, displayName?: string) => Promise<{ error: any; validationError?: string }>
   signInWithGoogle: () => Promise<{ error: any }>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<{ error: any }>
@@ -59,47 +58,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return { error }
   }
 
+  /**
+   * Register through the server route rather than calling Supabase directly.
+   *
+   * Spam trap validation and IP blocking are enforced there, on the same
+   * request that creates the account, so no client path can skip them.
+   */
   const signUp = async (email: string, password: string, displayName?: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          display_name: displayName || "",
-        },
-      },
-    })
-    return { error }
-  }
-
-  const signUpWithValidation = async (email: string, password: string, displayName?: string) => {
-    // Validate email with ZeroBounce before signup
     try {
-      const validationResponse = await fetch("/api/auth/validate-signup", {
+      const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, password, displayName: displayName || "" }),
       })
 
-      const validationData = await validationResponse.json()
+      const data = await response.json()
 
-      if (!validationData.allowed) {
-        // Return validation error
-        return {
-          error: { message: validationData.reason || "Email validation failed" },
-          validationError: validationData.reason,
-        }
+      if (!response.ok) {
+        return { error: { message: data?.error || "Failed to sign up" } }
       }
 
-      // Email is valid, proceed with signup
-      return await signUp(email, password, displayName)
+      return { error: null }
     } catch (error: any) {
-      // If validation API fails, log but allow signup to proceed
-      // This prevents blocking legitimate users if ZeroBounce API is down
-      console.error("Email validation error:", error)
-      return await signUp(email, password, displayName)
+      console.error("Signup request failed:", error)
+      return { error: { message: "Unable to reach the signup service. Please try again." } }
     }
   }
 
@@ -154,7 +138,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     loading,
     signIn,
     signUp,
-    signUpWithValidation,
     signInWithGoogle,
     signOut,
     resetPassword,

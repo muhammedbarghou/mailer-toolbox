@@ -1,7 +1,8 @@
 "use client"
 
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useMemo } from 'react'
 import { toPng, toJpeg } from 'html-to-image'
+import { sanitizeHtmlPreview } from '@/lib/security/sanitize-html'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
@@ -14,6 +15,9 @@ const HtmlToImage = () => {
   const [isConverting, setIsConverting] = useState<boolean>(false)
   const [imageFormat, setImageFormat] = useState<'png' | 'jpeg'>('png')
   const previewRef = useRef<HTMLDivElement>(null)
+
+  // Pasted email HTML is untrusted, so it is sanitised before it reaches the DOM
+  const sanitizedPreviewHtml = useMemo(() => sanitizeHtmlPreview(htmlInput), [htmlInput])
 
   const handleDownload = async () => {
     if (!previewRef.current || !htmlInput.trim()) {
@@ -282,7 +286,7 @@ const HtmlToImage = () => {
                     color: '#000000',
                     backgroundColor: '#ffffff',
                   }}
-                  dangerouslySetInnerHTML={{ __html: htmlInput }}
+                  dangerouslySetInnerHTML={{ __html: sanitizedPreviewHtml }}
                 />
               ) : (
                 <div 

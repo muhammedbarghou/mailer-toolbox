@@ -38,7 +38,7 @@ export async function GET(_request: NextRequest) {
       {
         authenticated: false,
         hasAnyKey: false,
-        error: error?.message || "Failed to check API key status",
+        error: "Failed to check API key status",
       },
       { status: 500 },
     );

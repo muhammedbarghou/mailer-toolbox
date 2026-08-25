@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { validateGeminiApiKey } from "@/lib/api-key-validation";
 import { updateApiKeyValidation } from "@/lib/api-keys";
-import { getUserApiKeys, decryptApiKey } from "@/lib/api-keys";
 import { decryptApiKey as decrypt } from "@/lib/encryption";
 
 /**
@@ -93,7 +92,7 @@ export async function POST(
   } catch (error: any) {
     console.error("Error validating API key:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to validate API key" },
+      { error: "Failed to validate API key" },
       { status: 500 }
     );
   }

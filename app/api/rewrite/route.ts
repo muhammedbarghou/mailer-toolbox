@@ -12,8 +12,15 @@ import {
   setCachedContent,
 } from "@/lib/prompt-cache";
 import { logToolRun, logToolError } from "@/lib/analytics/usage-events";
+import { checkRateLimit, rateLimitResponse } from "@/lib/security/rate-limit";
 
 const TOOL_SLUG = "/rewrite";
+
+/** Each call is a full AI generation, so the window is deliberately tight */
+const RATE_LIMIT = { max: 20, windowSeconds: 3600 };
+
+/** Guards against multi-megabyte prompts being pushed through the provider */
+const MAX_HTML_LENGTH = 500_000;
 
 // System prompt for email rewriting
 const SYSTEM_PROMPT = `EXPERT EMAIL HTML REWRITER: COMPLETE SPAM FILTER BYPASS SYSTEM
@@ -373,6 +380,14 @@ export async function POST(request: NextRequest) {
       return respondWithError("missing_html", "HTML content is required", 400);
     }
 
+    if (html.length > MAX_HTML_LENGTH) {
+      return respondWithError(
+        "html_too_large",
+        "HTML content is too large to rewrite.",
+        413
+      );
+    }
+
     // Validate provider
     const validProviders: ApiKeyProvider[] = ["gemini", "openai", "anthropic"];
     if (!validProviders.includes(provider)) {
@@ -391,8 +406,9 @@ export async function POST(request: NextRequest) {
         ? theme.trim()
         : undefined;
 
-    // Resolve the caller up front so telemetry can attribute cache hits too.
-    // Access is still gated below, at the same point as before.
+    // Resolve and gate the caller before anything else. The cache read below
+    // must stay behind this check, otherwise an anonymous caller could pull
+    // previously generated results straight out of Redis.
     const supabase = await createClient();
     const {
       data: { user: authUser },
@@ -400,6 +416,28 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     userId = authUser?.id ?? null;
+
+    if (authError || !authUser) {
+      return respondWithError(
+        "unauthenticated",
+        "Authentication required. Please log in to use this feature.",
+        401
+      );
+    }
+
+    const rateLimit = await checkRateLimit(`rewrite:${authUser.id}`, RATE_LIMIT);
+    if (!rateLimit.allowed) {
+      await logToolError({
+        userId,
+        toolSlug: TOOL_SLUG,
+        provider,
+        model: selectedModel,
+        durationMs: Date.now() - startedAt,
+        errorCode: "rate_limited",
+      });
+
+      return rateLimitResponse(rateLimit);
+    }
 
     // Generate cache key using optimized caching system
     const { cacheKey } = await getCacheKey(
@@ -435,23 +473,6 @@ export async function POST(request: NextRequest) {
       provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
 
     try {
-      if (authError) {
-        console.error("Auth error:", authError);
-        return respondWithError(
-          "unauthenticated",
-          "Authentication required. Please log in to use this feature.",
-          401
-        );
-      }
-
-      if (!authUser) {
-        return respondWithError(
-          "unauthenticated",
-          "Authentication required. Please log in to use this feature.",
-          401
-        );
-      }
-
       // MUST get user's API key for the selected provider - no fallback to environment variable
       const userApiKey = await getUserApiKey(authUser.id, provider);
       if (!userApiKey) {
@@ -463,7 +484,6 @@ export async function POST(request: NextRequest) {
       }
 
       apiKeyToUse = userApiKey;
-      console.log(`Using user ${provider} API key for user ${authUser.id}`);
     } catch (error) {
       console.error("Error getting user API key:", error);
       return respondWithError(
@@ -672,12 +692,10 @@ ${html}`;
     });
   } catch (error: any) {
     console.error("Error in rewrite API:", error);
-    
-    // Provide more specific error messages
-    const errorMessage = error?.message || "An unexpected error occurred";
+
     return respondWithError(
       "unhandled_exception",
-      `Internal server error: ${errorMessage}`,
+      "An unexpected error occurred while rewriting the email.",
       500
     );
   }

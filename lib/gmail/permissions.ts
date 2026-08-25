@@ -17,28 +17,6 @@ export interface GmailPermission {
 }
 
 /**
- * Get all Gmail accounts a user can access
- * Returns accounts they own + accounts shared with them
- */
-export const getGmailAccountsForUser = async (
-  userId: string
-): Promise<GmailAccount[]> => {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("gmail_accounts")
-    .select("id, user_id, email, created_at, updated_at")
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("Error fetching Gmail accounts:", error);
-    return [];
-  }
-
-  return (data || []) as GmailAccount[];
-};
-
-/**
  * Get accounts owned by a user
  */
 export const getOwnedGmailAccounts = async (

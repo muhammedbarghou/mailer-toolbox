@@ -100,10 +100,15 @@ export const exchangeCodeForTokens = async (
  */
 export const revokeToken = async (token: string): Promise<boolean> => {
   try {
-    const response = await fetch(
-      `https://oauth2.googleapis.com/revoke?token=${token}`,
-      { method: "POST" }
-    );
+    // Sent in the body rather than the query string, so the token cannot end up
+    // in proxy logs or request traces
+    const response = await fetch("https://oauth2.googleapis.com/revoke", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ token }),
+    });
 
     return response.ok;
   } catch (error) {

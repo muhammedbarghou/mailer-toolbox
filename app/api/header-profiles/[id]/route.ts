@@ -50,10 +50,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
     });
   } catch (error: unknown) {
     console.error("Error fetching header profile:", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "Failed to fetch header profile";
-    return NextResponse.json(
-      { error: errorMessage },
+        return NextResponse.json(
+      { error: "Failed to fetch header profile" },
       { status: 500 }
     );
   }
@@ -114,10 +112,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     });
   } catch (error: unknown) {
     console.error("Error updating header profile:", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "Failed to update header profile";
-    return NextResponse.json(
-      { error: errorMessage },
+        return NextResponse.json(
+      { error: "Failed to update header profile" },
       { status: 500 }
     );
   }
@@ -162,10 +158,8 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     });
   } catch (error: unknown) {
     console.error("Error deleting header profile:", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "Failed to delete header profile";
-    return NextResponse.json(
-      { error: errorMessage },
+        return NextResponse.json(
+      { error: "Failed to delete header profile" },
       { status: 500 }
     );
   }

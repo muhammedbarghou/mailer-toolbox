@@ -49,69 +49,21 @@ Remember: You are analyzing ALL input subjects together and must return EXACTLY 
 
 const SYSTEM_PROMPT = getSystemPrompt();
 
-import { Redis } from "@upstash/redis";
+import { checkRateLimit, rateLimitResponse } from "@/lib/security/rate-limit";
 
-// Get environment variables
-const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
-const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 // Note: We do NOT use API keys from environment - we require users to provide their own API keys
 
-// Rate limit configuration
-const RATE_LIMIT_MAX = 5; // 5 tries per hour
-const RATE_LIMIT_WINDOW = 3600; // 1 hour in seconds
+/**
+ * Rate limit configuration.
+ *
+ * Keyed on the authenticated user id rather than the client IP: a forwarding
+ * header can be rotated at will, so an IP key offered no real limit.
+ */
+const RATE_LIMIT = { max: 5, windowSeconds: 3600 };
 
-// Initialize Redis client for rate limiting
-const redis = REDIS_URL && REDIS_TOKEN
-  ? new Redis({
-      url: REDIS_URL,
-      token: REDIS_TOKEN,
-    })
-  : null;
-
-// Helper function to get client identifier (IP address or user ID)
-const getClientId = (request: NextRequest): string => {
-  // Try to get IP from headers (works with Vercel and most proxies)
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  const realIp = request.headers.get("x-real-ip");
-  const ip = forwardedFor?.split(",")[0] || realIp || "unknown";
-  
-  return `subject-rewrite:${ip}`;
-};
-
-// Rate limiting function
-const checkRateLimit = async (clientId: string): Promise<{ allowed: boolean; remaining: number; resetAt: number }> => {
-  if (!redis) {
-    // If Redis is not available, allow the request (for development)
-    return { allowed: true, remaining: RATE_LIMIT_MAX, resetAt: Date.now() + RATE_LIMIT_WINDOW * 1000 };
-  }
-
-  try {
-    const key = `rate-limit:${clientId}`;
-    const current = await redis.get<number>(key);
-
-    if (current === null) {
-      // First request - set the counter
-      await redis.set(key, 1, { ex: RATE_LIMIT_WINDOW });
-      return { allowed: true, remaining: RATE_LIMIT_MAX - 1, resetAt: Date.now() + RATE_LIMIT_WINDOW * 1000 };
-    }
-
-    if (current >= RATE_LIMIT_MAX) {
-      // Rate limit exceeded
-      const ttl = await redis.ttl(key);
-      return { allowed: false, remaining: 0, resetAt: Date.now() + ttl * 1000 };
-    }
-
-    // Increment counter
-    await redis.incr(key);
-    const remaining = RATE_LIMIT_MAX - (current + 1);
-    const ttl = await redis.ttl(key);
-    return { allowed: true, remaining, resetAt: Date.now() + ttl * 1000 };
-  } catch (error) {
-    console.error("Redis rate limit error:", error);
-    // On error, allow the request
-    return { allowed: true, remaining: RATE_LIMIT_MAX, resetAt: Date.now() + RATE_LIMIT_WINDOW * 1000 };
-  }
-};
+/** Bounds the prompt built from the caller's subject lines */
+const MAX_SUBJECTS = 50;
+const MAX_SUBJECT_LENGTH = 500;
 
 export async function POST(request: NextRequest) {
   const startedAt = Date.now();
@@ -140,22 +92,35 @@ export async function POST(request: NextRequest) {
   };
 
   try {
-    // Check rate limit
-    const clientId = getClientId(request);
-    const rateLimit = await checkRateLimit(clientId);
+    // Resolve the caller first, so the rate limit below can be keyed on them
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-    if (!rateLimit.allowed) {
-      const resetDate = new Date(rateLimit.resetAt);
+    userId = user?.id ?? null;
+
+    if (authError || !user) {
       return respondWithError(
-        "rate_limited",
-        {
-          error: "Rate limit exceeded",
-          message: `You have reached the limit of ${RATE_LIMIT_MAX} requests per hour. Please try again after ${resetDate.toLocaleTimeString()}.`,
-          resetAt: rateLimit.resetAt,
-          remaining: 0,
-        },
-        429
+        "unauthenticated",
+        { error: "Authentication required. Please log in to use this feature." },
+        401
       );
+    }
+
+    const rateLimit = await checkRateLimit(`subject-rewrite:${user.id}`, RATE_LIMIT);
+    if (!rateLimit.allowed) {
+      await logToolError({
+        userId,
+        toolSlug: TOOL_SLUG,
+        provider,
+        model: selectedModel,
+        durationMs: Date.now() - startedAt,
+        errorCode: "rate_limited",
+      });
+
+      return rateLimitResponse(rateLimit);
     }
 
     // Parse request body
@@ -186,6 +151,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (subjects.length > MAX_SUBJECTS) {
+      return respondWithError(
+        "too_many_subjects",
+        { error: `You can rewrite up to ${MAX_SUBJECTS} subject lines at a time.` },
+        400
+      );
+    }
+
+    if (subjects.some((s: string) => s.length > MAX_SUBJECT_LENGTH)) {
+      return respondWithError(
+        "subject_too_long",
+        { error: `Each subject line must be ${MAX_SUBJECT_LENGTH} characters or fewer.` },
+        400
+      );
+    }
+
     // Validate provider
     const validProviders: ApiKeyProvider[] = ["gemini", "openai", "anthropic"];
     if (!validProviders.includes(provider)) {
@@ -205,31 +186,6 @@ export async function POST(request: NextRequest) {
       provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
 
     try {
-      const supabase = await createClient();
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-
-      userId = user?.id ?? null;
-
-      if (authError) {
-        console.error("Auth error:", authError);
-        return respondWithError(
-          "unauthenticated",
-          { error: "Authentication required. Please log in to use this feature." },
-          401
-        );
-      }
-
-      if (!user) {
-        return respondWithError(
-          "unauthenticated",
-          { error: "Authentication required. Please log in to use this feature." },
-          401
-        );
-      }
-
       // MUST get user's API key for the selected provider - no fallback to environment variable
       const userApiKey = await getUserApiKey(user.id, provider);
       if (!userApiKey) {
@@ -243,7 +199,6 @@ export async function POST(request: NextRequest) {
       }
 
       apiKeyToUse = userApiKey;
-      console.log(`Using user ${provider} API key for user ${user.id}`);
     } catch (error) {
       console.error("Error getting user API key:", error);
       return respondWithError(
@@ -488,10 +443,9 @@ MANDATORY REQUIREMENTS:
     });
   } catch (error: any) {
     console.error("Error in subject-rewrite API:", error);
-    const errorMessage = error?.message || "An unexpected error occurred";
     return respondWithError(
       "unhandled_exception",
-      { error: `Internal server error: ${errorMessage}` },
+      { error: "An unexpected error occurred while rewriting subject lines." },
       500
     );
   }

@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error("Error generating auth URL:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to generate authorization URL" },
+      { error: "Failed to generate authorization URL" },
       { status: 500 }
     );
   }

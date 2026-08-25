@@ -3,7 +3,7 @@
  * Uses browser's native cookie API with proper TypeScript types
  */
 
-type CookieOptions = {
+export type CookieOptions = {
   expires?: number | Date // Days as number or specific Date
   path?: string
   domain?: string

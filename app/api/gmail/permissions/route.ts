@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error("Error getting viewers:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to get viewers" },
+      { error: "Failed to get viewers" },
       { status: 500 }
     );
   }
@@ -171,7 +171,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Error adding viewer:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to add viewer" },
+      { error: "Failed to add viewer" },
       { status: 500 }
     );
   }
@@ -241,7 +241,7 @@ export async function DELETE(request: NextRequest) {
   } catch (error: any) {
     console.error("Error removing viewer:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to remove viewer" },
+      { error: "Failed to remove viewer" },
       { status: 500 }
     );
   }

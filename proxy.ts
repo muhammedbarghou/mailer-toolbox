@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { isIpBlocked, extractIpAddress } from "@/lib/zero-bounce";
+import { isIpBlocked } from "@/lib/zero-bounce";
+import { extractIpAddress, UNKNOWN_IP } from "@/lib/security/client-ip";
 import { isAdminEmail } from "@/lib/admin/access-control";
 
 /**
@@ -12,7 +13,11 @@ import { isAdminEmail } from "@/lib/admin/access-control";
  * boundary is requireAdmin in the admin layout and every /api/admin route.
  */
 
-const SIGNUP_ROUTES = ["/api/auth/validate-signup", "/auth/signup"];
+const SIGNUP_ROUTES = [
+  "/api/auth/signup",
+  "/api/auth/validate-signup",
+  "/auth/signup",
+];
 
 /**
  * Redirect non-admins away from /admin before the page renders
@@ -59,7 +64,7 @@ const handleSignupRoute = async (request: NextRequest): Promise<NextResponse> =>
   const ipAddress = extractIpAddress(request.headers);
 
   // Skip check for unknown IPs (development/localhost)
-  if (ipAddress === "unknown") {
+  if (ipAddress === UNKNOWN_IP) {
     return NextResponse.next();
   }
 
@@ -97,5 +102,11 @@ export async function proxy(request: NextRequest) {
 
 // Configure which routes the middleware should run on
 export const config = {
-  matcher: ["/admin", "/admin/:path*", "/api/auth/validate-signup", "/auth/signup"],
+  matcher: [
+    "/admin",
+    "/admin/:path*",
+    "/api/auth/signup",
+    "/api/auth/validate-signup",
+    "/auth/signup",
+  ],
 };

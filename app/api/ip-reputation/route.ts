@@ -3,8 +3,18 @@ import { createClient } from "@/lib/supabase/server";
 import { isIPv4, isIPv6 } from "net";
 import dns from "dns/promises";
 import { logToolRun, logToolError } from "@/lib/analytics/usage-events";
+import { checkRateLimit, rateLimitResponse } from "@/lib/security/rate-limit";
+import { isPrivateIpAddress } from "@/lib/security/ip-range";
 
 const TOOL_SLUG = "/ip-reputation";
+
+/**
+ * Each request fans out to as many as MAX_ITEMS AbuseIPDB lookups against a
+ * server-owned API key, so the per-user budget is capped.
+ */
+const RATE_LIMIT = { max: 20, windowSeconds: 3600 };
+
+const MAX_ITEMS = 30;
 
 type QueryType = "ip" | "domain" | "url";
 
@@ -94,25 +104,45 @@ const parseQueryValue = (raw: string): { queryType: QueryType; value: string } =
   return { queryType: "url", value: url.hostname };
 };
 
+/**
+ * Resolve a hostname to a publicly routable address.
+ *
+ * Private, loopback and link-local results are rejected rather than returned:
+ * echoing them back would let a caller point a hostname at internal
+ * infrastructure and use this endpoint to map the network.
+ */
 const resolveToIpAddress = async (value: string): Promise<string> => {
+  const rejectPrivate = (address: string): string => {
+    if (isPrivateIpAddress(address)) {
+      throw new Error("This address is not publicly routable and cannot be checked");
+    }
+    return address;
+  };
+
   if (isIpAddress(value)) {
-    return value;
+    return rejectPrivate(value);
   }
 
   try {
     const addresses = await dns.resolve4(value);
     if (addresses.length > 0) {
-      return addresses[0];
+      return rejectPrivate(addresses[0]);
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("not publicly routable")) {
+      throw error;
+    }
   }
 
   try {
     const addresses6 = await dns.resolve6(value);
     if (addresses6.length > 0) {
-      return addresses6[0];
+      return rejectPrivate(addresses6[0]);
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("not publicly routable")) {
+      throw error;
+    }
   }
 
   throw new Error("Unable to resolve hostname to IP address");
@@ -208,6 +238,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const rateLimit = await checkRateLimit(`ip-reputation:${user.id}`, RATE_LIMIT);
+    if (!rateLimit.allowed) {
+      await logToolError({
+        userId,
+        toolSlug: TOOL_SLUG,
+        durationMs: Date.now() - startedAt,
+        errorCode: "rate_limited",
+      });
+
+      return rateLimitResponse(rateLimit);
+    }
+
     let body: ReputationRequestBody;
     try {
       body = await request.json();
@@ -237,10 +279,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (trimmedItems.length > 30) {
+    if (trimmedItems.length > MAX_ITEMS) {
       return respondWithError(
         "too_many_items",
-        "You can check up to 30 IPs/domains/URLs at a time.",
+        `You can check up to ${MAX_ITEMS} IPs/domains/URLs at a time.`,
         400,
       );
     }
@@ -321,13 +363,13 @@ export async function POST(request: NextRequest) {
       results,
     });
   } catch (error: any) {
-    const message =
-      typeof error?.message === "string"
-        ? error.message
-        : "An unexpected error occurred while checking IP reputation.";
     console.error("Error in /api/ip-reputation:", error);
 
-    return respondWithError("unhandled_exception", message, 500);
+    return respondWithError(
+      "unhandled_exception",
+      "An unexpected error occurred while checking IP reputation.",
+      500,
+    );
   }
 }
 

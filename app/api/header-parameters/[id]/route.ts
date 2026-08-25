@@ -65,9 +65,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     });
   } catch (error: unknown) {
     console.error("Error updating header parameter:", error);
-    const errorMessage = error instanceof Error ? error.message : "Failed to update header parameter";
-    return NextResponse.json(
-      { error: errorMessage },
+        return NextResponse.json(
+      { error: "Failed to update header parameter" },
       { status: 500 }
     );
   }
@@ -112,9 +111,8 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     });
   } catch (error: unknown) {
     console.error("Error deleting header parameter:", error);
-    const errorMessage = error instanceof Error ? error.message : "Failed to delete header parameter";
-    return NextResponse.json(
-      { error: errorMessage },
+        return NextResponse.json(
+      { error: "Failed to delete header parameter" },
       { status: 500 }
     );
   }

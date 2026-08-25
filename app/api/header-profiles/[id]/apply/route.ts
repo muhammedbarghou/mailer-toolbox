@@ -62,10 +62,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
   } catch (error: unknown) {
     console.error("Error applying header profile:", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "Failed to apply header profile";
-    return NextResponse.json(
-      { error: errorMessage },
+        return NextResponse.json(
+      { error: "Failed to apply header profile" },
       { status: 500 }
     );
   }

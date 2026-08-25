@@ -1,19 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  validateEmailWithIpCheck,
-  extractIpAddress,
-  isIpBlocked,
-} from "@/lib/zero-bounce";
+import { validateEmailWithIpCheck, isIpBlocked } from "@/lib/zero-bounce";
+import { extractIpAddress } from "@/lib/security/client-ip";
+import { checkRateLimit, rateLimitResponse } from "@/lib/security/rate-limit";
 
 /**
  * POST /api/auth/validate-signup
  * Validate email address before signup to prevent spam traps
- * 
+ *
+ * This is a pre-flight convenience for the signup form. It is not the
+ * enforcement point: /api/auth/signup re-runs the same checks on the request
+ * that actually creates the account.
+ *
  * Request body:
  * {
  *   email: string
  * }
- * 
+ *
  * Response:
  * {
  *   allowed: boolean
@@ -21,8 +23,22 @@ import {
  *   attemptsRemaining?: number
  * }
  */
+
+/** Every call spends a ZeroBounce credit, so anonymous use is capped per IP */
+const RATE_LIMIT = { max: 20, windowSeconds: 3600 };
+
+const MAX_EMAIL_LENGTH = 200;
+
 export async function POST(request: NextRequest) {
   try {
+    // Extract IP address from request headers
+    const ipAddress = extractIpAddress(request.headers);
+
+    const rateLimit = await checkRateLimit(`validate-signup:${ipAddress}`, RATE_LIMIT);
+    if (!rateLimit.allowed) {
+      return rateLimitResponse(rateLimit);
+    }
+
     // Parse request body
     let body;
     try {
@@ -44,8 +60,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Extract IP address from request headers
-    const ipAddress = extractIpAddress(request.headers);
+    if (email.length > MAX_EMAIL_LENGTH) {
+      return NextResponse.json(
+        { error: "Email address is too long" },
+        { status: 400 }
+      );
+    }
 
     // Check if IP is already blocked
     const blocked = await isIpBlocked(ipAddress);
@@ -83,12 +103,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("Error validating signup:", error);
-    
+
     return NextResponse.json(
-      {
-        error: "An unexpected error occurred during validation",
-        details: error?.message,
-      },
+      { error: "An unexpected error occurred during validation" },
       { status: 500 }
     );
   }

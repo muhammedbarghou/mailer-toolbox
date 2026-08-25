@@ -53,7 +53,7 @@ export async function GET() {
     }
 
     return NextResponse.json(
-      { error: errorMessage },
+      { error: "Failed to fetch header parameters" },
       { status: 500 }
     );
   }
@@ -136,9 +136,8 @@ export async function POST(request: NextRequest) {
     );
   } catch (error: unknown) {
     console.error("Error creating header parameter:", error);
-    const errorMessage = error instanceof Error ? error.message : "Failed to create header parameter";
-    return NextResponse.json(
-      { error: errorMessage },
+        return NextResponse.json(
+      { error: "Failed to create header parameter" },
       { status: 500 }
     );
   }

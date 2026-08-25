@@ -1,5 +1,6 @@
 import ZeroBounceSDK from "@zerobounce/zero-bounce-sdk";
 import { Redis } from "@upstash/redis";
+import { UNKNOWN_IP } from "@/lib/security/client-ip";
 
 // Initialize ZeroBounce SDK
 const zeroBounce = new ZeroBounceSDK();
@@ -56,24 +57,10 @@ export interface EmailValidationResult {
 }
 
 /**
- * Extract IP address from request headers (Vercel-compatible)
- */
-export const extractIpAddress = (headers: Headers): string => {
-  const forwardedFor = headers.get("x-forwarded-for");
-  const realIp = headers.get("x-real-ip");
-  const cfConnectingIp = headers.get("cf-connecting-ip"); // Cloudflare
-  
-  // x-forwarded-for can contain multiple IPs, take the first one
-  const ip = forwardedFor?.split(",")[0]?.trim() || realIp || cfConnectingIp || "unknown";
-  
-  return ip;
-};
-
-/**
  * Check if an IP address is permanently blocked
  */
 export const isIpBlocked = async (ip: string): Promise<boolean> => {
-  if (!redis || ip === "unknown") {
+  if (!redis || ip === UNKNOWN_IP) {
     return false;
   }
 
@@ -90,7 +77,7 @@ export const isIpBlocked = async (ip: string): Promise<boolean> => {
  * Get the current spam trap attempt count for an IP
  */
 export const getSpamTrapAttempts = async (ip: string): Promise<number> => {
-  if (!redis || ip === "unknown") {
+  if (!redis || ip === UNKNOWN_IP) {
     return 0;
   }
 
@@ -108,7 +95,7 @@ export const getSpamTrapAttempts = async (ip: string): Promise<number> => {
  * Returns the new attempt count and whether IP should be blocked
  */
 export const trackSpamTrapAttempt = async (ip: string): Promise<{ attempts: number; shouldBlock: boolean }> => {
-  if (!redis || ip === "unknown") {
+  if (!redis || ip === UNKNOWN_IP) {
     return { attempts: 0, shouldBlock: false };
   }
 
@@ -137,7 +124,7 @@ export const trackSpamTrapAttempt = async (ip: string): Promise<{ attempts: numb
  * Permanently block an IP address
  */
 export const blockIp = async (ip: string): Promise<void> => {
-  if (!redis || ip === "unknown") {
+  if (!redis || ip === UNKNOWN_IP) {
     return;
   }
 
@@ -154,7 +141,7 @@ export const blockIp = async (ip: string): Promise<void> => {
  * Lift a permanent block and clear the attempt counter for an IP address
  */
 export const unblockIp = async (ip: string): Promise<boolean> => {
-  if (!redis || !ip || ip === "unknown") {
+  if (!redis || !ip || ip === UNKNOWN_IP) {
     return false;
   }
 

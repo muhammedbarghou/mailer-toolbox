@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
     console.error("Error in OAuth callback:", error);
     return NextResponse.redirect(
       new URL(
-        `/gmail-deliverability?error=${encodeURIComponent(error.message || "oauth_error")}`,
+        `/gmail-deliverability?error=${encodeURIComponent("oauth_error")}`,
         request.url
       )
     );

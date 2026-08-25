@@ -108,13 +108,10 @@ export const useRecentTools = (maxTools: number = 5) => {
 
   const addRecentTool = useCallback(
     (toolName: string) => {
-      setRecentTools((prev) => {
-        const filtered = prev.filter((tool) => tool !== toolName)
-        const updated = [toolName, ...filtered].slice(0, maxTools)
-        return updated
-      })
+      const filtered = recentTools.filter((tool) => tool !== toolName)
+      setRecentTools([toolName, ...filtered].slice(0, maxTools))
     },
-    [setRecentTools, maxTools],
+    [recentTools, setRecentTools, maxTools],
   )
 
   return {

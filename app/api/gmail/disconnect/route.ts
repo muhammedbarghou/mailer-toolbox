@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Error disconnecting Gmail account:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to disconnect account" },
+      { error: "Failed to disconnect account" },
       { status: 500 }
     );
   }

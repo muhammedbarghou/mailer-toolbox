@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Error refreshing tokens:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to refresh tokens" },
+      { error: "Failed to refresh tokens" },
       { status: 500 }
     );
   }

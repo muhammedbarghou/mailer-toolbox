@@ -55,7 +55,7 @@ export async function GET() {
     }
 
     return NextResponse.json(
-      { error: errorMessage },
+      { error: "Failed to fetch header profiles" },
       { status: 500 }
     );
   }
@@ -132,10 +132,8 @@ export async function POST(request: NextRequest) {
     );
   } catch (error: unknown) {
     console.error("Error creating header profile:", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "Failed to create header profile";
-    return NextResponse.json(
-      { error: errorMessage },
+        return NextResponse.json(
+      { error: "Failed to create header profile" },
       { status: 500 }
     );
   }

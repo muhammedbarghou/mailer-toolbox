@@ -63,8 +63,16 @@ export const searchMessages = async (
       pageToken,
     });
 
+    // The Gmail types mark id and threadId as optional, so drop any entry that
+    // is missing one rather than passing undefined ids downstream
+    const messages = (response.data.messages ?? []).flatMap((message) =>
+      message.id && message.threadId
+        ? [{ id: message.id, threadId: message.threadId }]
+        : []
+    );
+
     return {
-      messages: response.data.messages || [],
+      messages,
       nextPageToken: response.data.nextPageToken || undefined,
     };
   } catch (error) {
