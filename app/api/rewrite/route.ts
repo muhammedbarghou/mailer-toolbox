@@ -11,6 +11,9 @@ import {
   getCachedContent,
   setCachedContent,
 } from "@/lib/prompt-cache";
+import { logToolRun, logToolError } from "@/lib/analytics/usage-events";
+
+const TOOL_SLUG = "/rewrite";
 
 // System prompt for email rewriting
 const SYSTEM_PROMPT = `EXPERT EMAIL HTML REWRITER: COMPLETE SPAM FILTER BYPASS SYSTEM
@@ -329,43 +332,74 @@ IMPORTANT: Return ONLY the rewritten HTML email code. Do not include any explana
 // Note: We do NOT use API keys from environment - we require users to provide their own API keys
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
+  let userId: string | null = null;
+  let provider: ApiKeyProvider = "gemini";
+  let selectedModel: AIModel | null = null;
+
+  /**
+   * Record the failure, then return it, so every error path is measured
+   */
+  const respondWithError = async (
+    errorCode: string,
+    message: string,
+    status: number
+  ) => {
+    await logToolError({
+      userId,
+      toolSlug: TOOL_SLUG,
+      provider,
+      model: selectedModel,
+      durationMs: Date.now() - startedAt,
+      errorCode,
+    });
+
+    return NextResponse.json({ error: message }, { status });
+  };
+
   try {
     // Parse request body
     let body;
     try {
       body = await request.json();
     } catch (error) {
-      return NextResponse.json(
-        { error: "Invalid JSON in request body" },
-        { status: 400 }
-      );
+      return respondWithError("invalid_json", "Invalid JSON in request body", 400);
     }
 
-    const { html, theme, provider = "gemini", model } = body;
+    const { html, theme, model } = body;
+    provider = (body.provider ?? "gemini") as ApiKeyProvider;
 
     if (!html || typeof html !== "string") {
-      return NextResponse.json(
-        { error: "HTML content is required" },
-        { status: 400 }
-      );
+      return respondWithError("missing_html", "HTML content is required", 400);
     }
 
     // Validate provider
     const validProviders: ApiKeyProvider[] = ["gemini", "openai", "anthropic"];
     if (!validProviders.includes(provider)) {
-      return NextResponse.json(
-        { error: `Invalid provider. Must be one of: ${validProviders.join(", ")}` },
-        { status: 400 }
+      return respondWithError(
+        "invalid_provider",
+        `Invalid provider. Must be one of: ${validProviders.join(", ")}`,
+        400
       );
     }
 
     // Get model or use default for provider
-    const selectedModel: AIModel = model || getDefaultModel(provider);
+    selectedModel = (model || getDefaultModel(provider)) as AIModel;
 
     const themeKey: string | undefined =
       typeof theme === "string" && theme.trim().length > 0
         ? theme.trim()
         : undefined;
+
+    // Resolve the caller up front so telemetry can attribute cache hits too.
+    // Access is still gated below, at the same point as before.
+    const supabase = await createClient();
+    const {
+      data: { user: authUser },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    userId = authUser?.id ?? null;
 
     // Generate cache key using optimized caching system
     const { cacheKey } = await getCacheKey(
@@ -379,6 +413,16 @@ export async function POST(request: NextRequest) {
     // Check cache first
     const cached = await getCachedContent(cacheKey);
     if (cached) {
+      await logToolRun({
+        userId,
+        toolSlug: TOOL_SLUG,
+        provider,
+        model: selectedModel,
+        cached: true,
+        durationMs: Date.now() - startedAt,
+        metadata: { inputLength: html.length, theme: themeKey ?? null },
+      });
+
       return NextResponse.json({
         html: cached,
         cached: true,
@@ -387,66 +431,54 @@ export async function POST(request: NextRequest) {
 
     // Get API key: MUST use user's key if authenticated, never fall back to environment variable
     let apiKeyToUse: string | null = null;
-    let apiKeySource = "user";
-    
-    try {
-      const supabase = await createClient();
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
+    const providerLabel =
+      provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
 
+    try {
       if (authError) {
         console.error("Auth error:", authError);
-        return NextResponse.json(
-          { 
-            error: "Authentication required. Please log in to use this feature." 
-          },
-          { status: 401 }
+        return respondWithError(
+          "unauthenticated",
+          "Authentication required. Please log in to use this feature.",
+          401
         );
       }
 
-      if (!user) {
-        return NextResponse.json(
-          { 
-            error: "Authentication required. Please log in to use this feature." 
-          },
-          { status: 401 }
+      if (!authUser) {
+        return respondWithError(
+          "unauthenticated",
+          "Authentication required. Please log in to use this feature.",
+          401
         );
       }
 
       // MUST get user's API key for the selected provider - no fallback to environment variable
-      const userApiKey = await getUserApiKey(user.id, provider);
+      const userApiKey = await getUserApiKey(authUser.id, provider);
       if (!userApiKey) {
-        const providerName = provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
-        return NextResponse.json(
-          { 
-            error: `No API key configured. Please add your ${providerName} API key in Settings to use this feature.` 
-          },
-          { status: 400 }
+        return respondWithError(
+          "no_api_key",
+          `No API key configured. Please add your ${providerLabel} API key in Settings to use this feature.`,
+          400
         );
       }
 
       apiKeyToUse = userApiKey;
-      console.log(`Using user ${provider} API key for user ${user.id}`);
+      console.log(`Using user ${provider} API key for user ${authUser.id}`);
     } catch (error) {
       console.error("Error getting user API key:", error);
-      return NextResponse.json(
-        { 
-          error: "Failed to retrieve your API key. Please check your Settings." 
-        },
-        { status: 500 }
+      return respondWithError(
+        "api_key_lookup_failed",
+        "Failed to retrieve your API key. Please check your Settings.",
+        500
       );
     }
 
     // Validate API key is available
     if (!apiKeyToUse) {
-      const providerName = provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
-      return NextResponse.json(
-        { 
-          error: `No API key configured. Please add your ${providerName} API key in Settings.` 
-        },
-        { status: 400 }
+      return respondWithError(
+        "no_api_key",
+        `No API key configured. Please add your ${providerLabel} API key in Settings.`,
+        400
       );
     }
 
@@ -495,7 +527,6 @@ ${html}`;
     let result;
     const maxRetries = 3;
     let lastError: any = null;
-    const providerName = provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -513,13 +544,14 @@ ${html}`;
         break;
       } catch (error: any) {
         lastError = error;
-        console.error(`${providerName} API error (attempt ${attempt + 1}/${maxRetries + 1}):`, error);
+        console.error(`${providerLabel} API error (attempt ${attempt + 1}/${maxRetries + 1}):`, error);
         
         // Handle specific API errors that shouldn't be retried
         if (error?.statusCode === 401 || error?.status === 401) {
-          return NextResponse.json(
-            { error: `Invalid ${providerName} API key. Please check your API key in Settings.` },
-            { status: 500 }
+          return respondWithError(
+            "invalid_api_key",
+            `Invalid ${providerLabel} API key. Please check your API key in Settings.`,
+            500
           );
         }
         
@@ -532,9 +564,10 @@ ${html}`;
             await new Promise((resolve) => setTimeout(resolve, delayMs));
             continue; // Retry
           } else {
-            return NextResponse.json(
-              { error: `The ${providerName} model is currently overloaded. Please try again in a few moments.` },
-              { status: 503 }
+            return respondWithError(
+              "model_overloaded",
+              `The ${providerLabel} model is currently overloaded. Please try again in a few moments.`,
+              503
             );
           }
         }
@@ -548,9 +581,10 @@ ${html}`;
             await new Promise((resolve) => setTimeout(resolve, delayMs));
             continue; // Retry
           } else {
-            return NextResponse.json(
-              { error: `${providerName} API quota exceeded or rate limit reached. Please check your billing and try again later.` },
-              { status: 500 }
+            return respondWithError(
+              "quota_exceeded",
+              `${providerLabel} API quota exceeded or rate limit reached. Please check your billing and try again later.`,
+              500
             );
           }
         }
@@ -564,18 +598,20 @@ ${html}`;
             await new Promise((resolve) => setTimeout(resolve, delayMs));
             continue; // Retry
           } else {
-            return NextResponse.json(
-              { error: `${providerName} API is temporarily unavailable. Please try again later.` },
-              { status: 500 }
+            return respondWithError(
+              "provider_unavailable",
+              `${providerLabel} API is temporarily unavailable. Please try again later.`,
+              500
             );
           }
         }
 
         // For other errors, don't retry
-        const errorMessage = error?.message || `${providerName} API request failed`;
-        return NextResponse.json(
-          { error: `${providerName} API error: ${errorMessage}` },
-          { status: 500 }
+        const errorMessage = error?.message || `${providerLabel} API request failed`;
+        return respondWithError(
+          "provider_error",
+          `${providerLabel} API error: ${errorMessage}`,
+          500
         );
       }
     }
@@ -583,34 +619,52 @@ ${html}`;
     // If we exhausted retries without success
     if (!result) {
       if (lastError?.message?.includes("overloaded") || lastError?.message?.toLowerCase().includes("model is overloaded")) {
-        return NextResponse.json(
-          { error: `The ${providerName} model is currently overloaded. Please try again in a few moments.` },
-          { status: 503 }
+        return respondWithError(
+          "model_overloaded",
+          `The ${providerLabel} model is currently overloaded. Please try again in a few moments.`,
+          503
         );
       }
       if (lastError?.statusCode === 429 || lastError?.status === 429 || lastError?.message?.includes("quota")) {
-        return NextResponse.json(
-          { error: `${providerName} API quota exceeded or rate limit reached. Please try again in a few moments.` },
-          { status: 500 }
+        return respondWithError(
+          "quota_exceeded",
+          `${providerLabel} API quota exceeded or rate limit reached. Please try again in a few moments.`,
+          500
         );
       }
-      return NextResponse.json(
-        { error: `Failed to connect to ${providerName} API after multiple attempts. Please try again later.` },
-        { status: 500 }
+      return respondWithError(
+        "provider_unreachable",
+        `Failed to connect to ${providerLabel} API after multiple attempts. Please try again later.`,
+        500
       );
     }
 
     const rewrittenHtml = result.text;
 
     if (!rewrittenHtml) {
-      return NextResponse.json(
-        { error: "Failed to generate rewritten HTML. The AI model returned an empty response." },
-        { status: 500 }
+      return respondWithError(
+        "empty_response",
+        "Failed to generate rewritten HTML. The AI model returned an empty response.",
+        500
       );
     }
 
     // Cache the result using optimized caching system
     await setCachedContent(cacheKey, rewrittenHtml);
+
+    await logToolRun({
+      userId,
+      toolSlug: TOOL_SLUG,
+      provider,
+      model: selectedModel,
+      cached: false,
+      durationMs: Date.now() - startedAt,
+      metadata: {
+        inputLength: html.length,
+        outputLength: rewrittenHtml.length,
+        theme: themeKey ?? null,
+      },
+    });
 
     return NextResponse.json({
       html: rewrittenHtml,
@@ -621,9 +675,10 @@ ${html}`;
     
     // Provide more specific error messages
     const errorMessage = error?.message || "An unexpected error occurred";
-    return NextResponse.json(
-      { error: `Internal server error: ${errorMessage}` },
-      { status: 500 }
+    return respondWithError(
+      "unhandled_exception",
+      `Internal server error: ${errorMessage}`,
+      500
     );
   }
 }

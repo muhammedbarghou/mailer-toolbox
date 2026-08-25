@@ -151,6 +151,107 @@ export const blockIp = async (ip: string): Promise<void> => {
 };
 
 /**
+ * Lift a permanent block and clear the attempt counter for an IP address
+ */
+export const unblockIp = async (ip: string): Promise<boolean> => {
+  if (!redis || !ip || ip === "unknown") {
+    return false;
+  }
+
+  try {
+    await redis.del(`spam-trap:blocked:${ip}`, `spam-trap:attempts:${ip}`);
+    console.log(`IP ${ip} has been unblocked`);
+    return true;
+  } catch (error) {
+    console.error("Redis error unblocking IP:", error);
+    return false;
+  }
+};
+
+export interface SpamTrapIpRecord {
+  ip: string;
+  blocked: boolean;
+  attempts: number;
+  /** Seconds until the attempt counter expires, or null when there is none */
+  attemptsExpireIn: number | null;
+}
+
+/**
+ * Read every IP currently tracked for spam trap abuse, blocked or not.
+ *
+ * Uses SCAN rather than KEYS so a large keyspace cannot stall Redis.
+ */
+export const listSpamTrapIps = async (): Promise<SpamTrapIpRecord[]> => {
+  if (!redis) {
+    return [];
+  }
+
+  try {
+    const scanAll = async (match: string): Promise<string[]> => {
+      const found: string[] = [];
+      let cursor = "0";
+
+      do {
+        const [nextCursor, keys] = await redis.scan(cursor, {
+          match,
+          count: 500,
+        });
+        found.push(...keys);
+        cursor = String(nextCursor);
+      } while (cursor !== "0");
+
+      return found;
+    };
+
+    const [blockedKeys, attemptKeys] = await Promise.all([
+      scanAll("spam-trap:blocked:*"),
+      scanAll("spam-trap:attempts:*"),
+    ]);
+
+    const blockedIps = new Set(
+      blockedKeys.map((key) => key.replace("spam-trap:blocked:", ""))
+    );
+    const attemptIps = attemptKeys.map((key) =>
+      key.replace("spam-trap:attempts:", "")
+    );
+
+    const allIps = Array.from(new Set([...blockedIps, ...attemptIps]));
+
+    const records = await Promise.all(
+      allIps.map(async (ip) => {
+        const [attempts, ttl] = await Promise.all([
+          getSpamTrapAttempts(ip),
+          redis.ttl(`spam-trap:attempts:${ip}`),
+        ]);
+
+        return {
+          ip,
+          blocked: blockedIps.has(ip),
+          attempts,
+          attemptsExpireIn: ttl > 0 ? ttl : null,
+        };
+      })
+    );
+
+    // Blocked first, then by attempt count
+    return records.sort((a, b) => {
+      if (a.blocked !== b.blocked) {
+        return a.blocked ? -1 : 1;
+      }
+      return b.attempts - a.attempts;
+    });
+  } catch (error) {
+    console.error("Redis error listing spam trap IPs:", error);
+    return [];
+  }
+};
+
+/**
+ * Expose the block threshold so the admin UI can explain the policy
+ */
+export const getSpamTrapThreshold = (): number => SPAM_TRAP_THRESHOLD;
+
+/**
  * Validate an email address using ZeroBounce SDK
  * @param email - Email address to validate
  * @param ipAddress - Optional IP address for context

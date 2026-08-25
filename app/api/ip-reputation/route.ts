@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isIPv4, isIPv6 } from "net";
 import dns from "dns/promises";
+import { logToolRun, logToolError } from "@/lib/analytics/usage-events";
+
+const TOOL_SLUG = "/ip-reputation";
 
 type QueryType = "ip" | "domain" | "url";
 
@@ -167,6 +170,27 @@ const fetchAbuseIpdbCheck = async (
 };
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
+  let userId: string | null = null;
+
+  /**
+   * Record the failure, then return it, so every error path is measured
+   */
+  const respondWithError = async (
+    errorCode: string,
+    message: string,
+    status: number,
+  ) => {
+    await logToolError({
+      userId,
+      toolSlug: TOOL_SLUG,
+      durationMs: Date.now() - startedAt,
+      errorCode,
+    });
+
+    return NextResponse.json({ error: message }, { status });
+  };
+
   try {
     const supabase = await createClient();
     const {
@@ -174,12 +198,13 @@ export async function POST(request: NextRequest) {
       error: authError,
     } = await supabase.auth.getUser();
 
+    userId = user?.id ?? null;
+
     if (authError || !user) {
-      return NextResponse.json(
-        {
-          error: "Authentication required. Please sign in to use the IP reputation tool.",
-        },
-        { status: 401 },
+      return respondWithError(
+        "unauthenticated",
+        "Authentication required. Please sign in to use the IP reputation tool.",
+        401,
       );
     }
 
@@ -187,16 +212,14 @@ export async function POST(request: NextRequest) {
     try {
       body = await request.json();
     } catch {
-      return NextResponse.json(
-        { error: "Invalid JSON in request body" },
-        { status: 400 },
-      );
+      return respondWithError("invalid_json", "Invalid JSON in request body", 400);
     }
 
     if (!body || !Array.isArray(body.items)) {
-      return NextResponse.json(
-        { error: "Request body must include an 'items' array." },
-        { status: 400 },
+      return respondWithError(
+        "missing_items",
+        "Request body must include an 'items' array.",
+        400,
       );
     }
 
@@ -207,16 +230,18 @@ export async function POST(request: NextRequest) {
       .filter((item) => item.input.length > 0);
 
     if (trimmedItems.length === 0) {
-      return NextResponse.json(
-        { error: "Please provide at least one IP address, domain, or URL." },
-        { status: 400 },
+      return respondWithError(
+        "empty_items",
+        "Please provide at least one IP address, domain, or URL.",
+        400,
       );
     }
 
     if (trimmedItems.length > 30) {
-      return NextResponse.json(
-        { error: "You can check up to 30 IPs/domains/URLs at a time." },
-        { status: 400 },
+      return respondWithError(
+        "too_many_items",
+        "You can check up to 30 IPs/domains/URLs at a time.",
+        400,
       );
     }
 
@@ -230,12 +255,10 @@ export async function POST(request: NextRequest) {
 
     const apiKey = process.env.ABUSEIPDB_API_KEY;
     if (!apiKey || apiKey.trim().length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "AbuseIPDB API key is not configured. Please set the ABUSEIPDB_API_KEY environment variable on the server.",
-        },
-        { status: 500 },
+      return respondWithError(
+        "missing_abuseipdb_key",
+        "AbuseIPDB API key is not configured. Please set the ABUSEIPDB_API_KEY environment variable on the server.",
+        500,
       );
     }
 
@@ -277,6 +300,20 @@ export async function POST(request: NextRequest) {
       results.push(baseResult);
     }
 
+    const failedLookups = results.filter((item) => !item.success).length;
+
+    await logToolRun({
+      userId,
+      toolSlug: TOOL_SLUG,
+      durationMs: Date.now() - startedAt,
+      metadata: {
+        itemCount: results.length,
+        failedLookups,
+        maxAgeInDays,
+        verbose,
+      },
+    });
+
     return NextResponse.json({
       maxAgeInDays,
       verbose,
@@ -290,12 +327,7 @@ export async function POST(request: NextRequest) {
         : "An unexpected error occurred while checking IP reputation.";
     console.error("Error in /api/ip-reputation:", error);
 
-    return NextResponse.json(
-      {
-        error: message,
-      },
-      { status: 500 },
-    );
+    return respondWithError("unhandled_exception", message, 500);
   }
 }
 

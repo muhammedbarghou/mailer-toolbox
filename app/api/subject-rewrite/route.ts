@@ -8,6 +8,9 @@ import {
   getDefaultModel,
   type AIModel,
 } from "@/lib/ai-providers";
+import { logToolRun, logToolError } from "@/lib/analytics/usage-events";
+
+const TOOL_SLUG = "/subject-rewrite";
 
 // Read the system prompt from the file
 const getSystemPrompt = () => {
@@ -111,6 +114,31 @@ const checkRateLimit = async (clientId: string): Promise<{ allowed: boolean; rem
 };
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
+  let userId: string | null = null;
+  let provider: ApiKeyProvider = "gemini";
+  let selectedModel: AIModel | null = null;
+
+  /**
+   * Record the failure, then return it, so every error path is measured
+   */
+  const respondWithError = async (
+    errorCode: string,
+    body: Record<string, unknown>,
+    status: number
+  ) => {
+    await logToolError({
+      userId,
+      toolSlug: TOOL_SLUG,
+      provider,
+      model: selectedModel,
+      durationMs: Date.now() - startedAt,
+      errorCode,
+    });
+
+    return NextResponse.json(body, { status });
+  };
+
   try {
     // Check rate limit
     const clientId = getClientId(request);
@@ -118,14 +146,15 @@ export async function POST(request: NextRequest) {
 
     if (!rateLimit.allowed) {
       const resetDate = new Date(rateLimit.resetAt);
-      return NextResponse.json(
+      return respondWithError(
+        "rate_limited",
         {
           error: "Rate limit exceeded",
           message: `You have reached the limit of ${RATE_LIMIT_MAX} requests per hour. Please try again after ${resetDate.toLocaleTimeString()}.`,
           resetAt: rateLimit.resetAt,
           remaining: 0,
         },
-        { status: 429 }
+        429
       );
     }
 
@@ -134,44 +163,47 @@ export async function POST(request: NextRequest) {
     try {
       body = await request.json();
     } catch (error) {
-      return NextResponse.json(
-        { error: "Invalid JSON in request body" },
-        { status: 400 }
-      );
+      return respondWithError("invalid_json", { error: "Invalid JSON in request body" }, 400);
     }
 
-    const { subjects, provider = "gemini", model } = body;
+    const { subjects, model } = body;
+    provider = (body.provider ?? "gemini") as ApiKeyProvider;
 
     if (!subjects || !Array.isArray(subjects) || subjects.length === 0) {
-      return NextResponse.json(
+      return respondWithError(
+        "missing_subjects",
         { error: "Subjects array is required and must not be empty" },
-        { status: 400 }
+        400
       );
     }
 
     // Validate that all subjects are strings
     if (!subjects.every((s: any) => typeof s === "string" && s.trim().length > 0)) {
-      return NextResponse.json(
+      return respondWithError(
+        "invalid_subjects",
         { error: "All subjects must be non-empty strings" },
-        { status: 400 }
+        400
       );
     }
 
     // Validate provider
     const validProviders: ApiKeyProvider[] = ["gemini", "openai", "anthropic"];
     if (!validProviders.includes(provider)) {
-      return NextResponse.json(
+      return respondWithError(
+        "invalid_provider",
         { error: `Invalid provider. Must be one of: ${validProviders.join(", ")}` },
-        { status: 400 }
+        400
       );
     }
 
     // Get model or use default for provider
-    const selectedModel: AIModel = model || getDefaultModel(provider);
+    selectedModel = (model || getDefaultModel(provider)) as AIModel;
 
     // Get API key: MUST use user's key if authenticated, never fall back to environment variable
     let apiKeyToUse: string | null = null;
-    
+    const providerLabel =
+      provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
+
     try {
       const supabase = await createClient();
       const {
@@ -179,34 +211,34 @@ export async function POST(request: NextRequest) {
         error: authError,
       } = await supabase.auth.getUser();
 
+      userId = user?.id ?? null;
+
       if (authError) {
         console.error("Auth error:", authError);
-        return NextResponse.json(
-          { 
-            error: "Authentication required. Please log in to use this feature." 
-          },
-          { status: 401 }
+        return respondWithError(
+          "unauthenticated",
+          { error: "Authentication required. Please log in to use this feature." },
+          401
         );
       }
 
       if (!user) {
-        return NextResponse.json(
-          { 
-            error: "Authentication required. Please log in to use this feature." 
-          },
-          { status: 401 }
+        return respondWithError(
+          "unauthenticated",
+          { error: "Authentication required. Please log in to use this feature." },
+          401
         );
       }
 
       // MUST get user's API key for the selected provider - no fallback to environment variable
       const userApiKey = await getUserApiKey(user.id, provider);
       if (!userApiKey) {
-        const providerName = provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
-        return NextResponse.json(
-          { 
-            error: `No API key configured. Please add your ${providerName} API key in Settings to use this feature.` 
+        return respondWithError(
+          "no_api_key",
+          {
+            error: `No API key configured. Please add your ${providerLabel} API key in Settings to use this feature.`,
           },
-          { status: 400 }
+          400
         );
       }
 
@@ -214,22 +246,19 @@ export async function POST(request: NextRequest) {
       console.log(`Using user ${provider} API key for user ${user.id}`);
     } catch (error) {
       console.error("Error getting user API key:", error);
-      return NextResponse.json(
-        { 
-          error: "Failed to retrieve your API key. Please check your Settings." 
-        },
-        { status: 500 }
+      return respondWithError(
+        "api_key_lookup_failed",
+        { error: "Failed to retrieve your API key. Please check your Settings." },
+        500
       );
     }
 
     // Validate API key is available
     if (!apiKeyToUse) {
-      const providerName = provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
-      return NextResponse.json(
-        { 
-          error: `No API key configured. Please add your ${providerName} API key in Settings.` 
-        },
-        { status: 400 }
+      return respondWithError(
+        "no_api_key",
+        { error: `No API key configured. Please add your ${providerLabel} API key in Settings.` },
+        400
       );
     }
 
@@ -276,7 +305,6 @@ MANDATORY REQUIREMENTS:
     let result;
     const maxRetries = 3;
     let lastError: any = null;
-    const providerName = provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Anthropic";
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -293,12 +321,13 @@ MANDATORY REQUIREMENTS:
         break;
       } catch (error: any) {
         lastError = error;
-        console.error(`${providerName} API error (attempt ${attempt + 1}/${maxRetries + 1}):`, error);
+        console.error(`${providerLabel} API error (attempt ${attempt + 1}/${maxRetries + 1}):`, error);
         
         if (error?.statusCode === 401 || error?.status === 401) {
-          return NextResponse.json(
-            { error: `Invalid ${providerName} API key. Please check your API key in Settings.` },
-            { status: 500 }
+          return respondWithError(
+            "invalid_api_key",
+            { error: `Invalid ${providerLabel} API key. Please check your API key in Settings.` },
+            500
           );
         }
         
@@ -311,9 +340,10 @@ MANDATORY REQUIREMENTS:
             await new Promise((resolve) => setTimeout(resolve, delayMs));
             continue;
           } else {
-            return NextResponse.json(
-              { error: `The ${providerName} model is currently overloaded. Please try again in a few moments.` },
-              { status: 503 }
+            return respondWithError(
+              "model_overloaded",
+              { error: `The ${providerLabel} model is currently overloaded. Please try again in a few moments.` },
+              503
             );
           }
         }
@@ -325,9 +355,10 @@ MANDATORY REQUIREMENTS:
             await new Promise((resolve) => setTimeout(resolve, delayMs));
             continue;
           } else {
-            return NextResponse.json(
-              { error: `${providerName} API quota exceeded or rate limit reached. Please check your billing and try again later.` },
-              { status: 500 }
+            return respondWithError(
+              "quota_exceeded",
+              { error: `${providerLabel} API quota exceeded or rate limit reached. Please check your billing and try again later.` },
+              500
             );
           }
         }
@@ -339,37 +370,42 @@ MANDATORY REQUIREMENTS:
             await new Promise((resolve) => setTimeout(resolve, delayMs));
             continue;
           } else {
-            return NextResponse.json(
-              { error: `${providerName} API is temporarily unavailable. Please try again later.` },
-              { status: 500 }
+            return respondWithError(
+              "provider_unavailable",
+              { error: `${providerLabel} API is temporarily unavailable. Please try again later.` },
+              500
             );
           }
         }
 
-        const errorMessage = error?.message || `${providerName} API request failed`;
-        return NextResponse.json(
-          { error: `${providerName} API error: ${errorMessage}` },
-          { status: 500 }
+        const errorMessage = error?.message || `${providerLabel} API request failed`;
+        return respondWithError(
+          "provider_error",
+          { error: `${providerLabel} API error: ${errorMessage}` },
+          500
         );
       }
     }
 
     if (!result) {
       if (lastError?.message?.includes("overloaded") || lastError?.message?.toLowerCase().includes("model is overloaded")) {
-        return NextResponse.json(
-          { error: `The ${providerName} model is currently overloaded. Please try again in a few moments.` },
-          { status: 503 }
+        return respondWithError(
+          "model_overloaded",
+          { error: `The ${providerLabel} model is currently overloaded. Please try again in a few moments.` },
+          503
         );
       }
       if (lastError?.statusCode === 429 || lastError?.status === 429 || lastError?.message?.includes("quota")) {
-        return NextResponse.json(
-          { error: `${providerName} API quota exceeded or rate limit reached. Please try again in a few moments.` },
-          { status: 500 }
+        return respondWithError(
+          "quota_exceeded",
+          { error: `${providerLabel} API quota exceeded or rate limit reached. Please try again in a few moments.` },
+          500
         );
       }
-      return NextResponse.json(
-        { error: `Failed to connect to ${providerName} API after multiple attempts. Please try again later.` },
-        { status: 500 }
+      return respondWithError(
+        "provider_unreachable",
+        { error: `Failed to connect to ${providerLabel} API after multiple attempts. Please try again later.` },
+        500
       );
     }
 
@@ -386,49 +422,62 @@ MANDATORY REQUIREMENTS:
       }
     } catch (parseError) {
       console.error(`Failed to parse AI response:`, result.text);
-      return NextResponse.json(
+      return respondWithError(
+        "unparseable_response",
         { error: `Failed to parse AI response. The model may not have returned valid JSON.` },
-        { status: 500 }
+        500
       );
     }
 
     // Validate the parsed result
     if (!parsedResult || typeof parsedResult !== "object") {
-      return NextResponse.json(
+      return respondWithError(
+        "invalid_response_format",
         { error: `Invalid response format. Expected an object.` },
-        { status: 500 }
+        500
       );
     }
 
     // Ensure we have the required field
     if (!Array.isArray(parsedResult.rewritten)) {
-      return NextResponse.json(
+      return respondWithError(
+        "invalid_response_structure",
         { error: `Invalid response structure. Missing 'rewritten' array field.` },
-        { status: 500 }
+        500
       );
     }
 
     // CRITICAL: Ensure we have exactly 10 alternatives
     if (parsedResult.rewritten.length !== 10) {
       console.error(`Returned ${parsedResult.rewritten.length} alternatives, expected exactly 10`);
-      return NextResponse.json(
-        { 
-          error: `Failed to generate exactly 10 alternatives. Received ${parsedResult.rewritten.length} alternatives instead. Please try again.` 
+      return respondWithError(
+        "wrong_alternative_count",
+        {
+          error: `Failed to generate exactly 10 alternatives. Received ${parsedResult.rewritten.length} alternatives instead. Please try again.`,
         },
-        { status: 500 }
+        500
       );
     }
 
     // Validate that all alternatives are non-empty strings
     const invalidAlternatives = parsedResult.rewritten.filter((alt: any) => typeof alt !== "string" || alt.trim().length === 0);
     if (invalidAlternatives.length > 0) {
-      return NextResponse.json(
-        { 
-          error: `Invalid alternatives found. All 10 alternatives must be non-empty strings.` 
-        },
-        { status: 500 }
+      return respondWithError(
+        "invalid_alternatives",
+        { error: `Invalid alternatives found. All 10 alternatives must be non-empty strings.` },
+        500
       );
     }
+
+    await logToolRun({
+      userId,
+      toolSlug: TOOL_SLUG,
+      provider,
+      model: selectedModel,
+      cached: false,
+      durationMs: Date.now() - startedAt,
+      metadata: { subjectCount: subjects.length },
+    });
 
     return NextResponse.json({
       rewritten: parsedResult.rewritten,
@@ -440,9 +489,10 @@ MANDATORY REQUIREMENTS:
   } catch (error: any) {
     console.error("Error in subject-rewrite API:", error);
     const errorMessage = error?.message || "An unexpected error occurred";
-    return NextResponse.json(
+    return respondWithError(
+      "unhandled_exception",
       { error: `Internal server error: ${errorMessage}` },
-      { status: 500 }
+      500
     );
   }
 }

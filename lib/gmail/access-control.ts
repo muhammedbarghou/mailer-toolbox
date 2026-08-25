@@ -1,9 +1,12 @@
 /**
  * Access control utility for Gmail deliverability feature
  * Restricts access to authorized users only
+ *
+ * Delegates to the shared admin allowlist in lib/admin/access-control so there
+ * is one place to change who has privileged access.
  */
 
-const ALLOWED_EMAIL = "muhammedbarghou@gmail.com";
+import { ADMIN_EMAILS, isAdminEmail } from "@/lib/admin/access-control";
 
 /**
  * Check if a user email has access to Gmail deliverability features
@@ -11,10 +14,7 @@ const ALLOWED_EMAIL = "muhammedbarghou@gmail.com";
  * @returns true if the user has access, false otherwise
  */
 export const hasGmailDeliverabilityAccess = (userEmail: string | null | undefined): boolean => {
-  if (!userEmail) {
-    return false;
-  }
-  return userEmail.toLowerCase() === ALLOWED_EMAIL.toLowerCase();
+  return isAdminEmail(userEmail);
 };
 
 /**
@@ -22,5 +22,5 @@ export const hasGmailDeliverabilityAccess = (userEmail: string | null | undefine
  * @returns The allowed email address
  */
 export const getAllowedEmail = (): string => {
-  return ALLOWED_EMAIL;
+  return ADMIN_EMAILS[0];
 };
